@@ -3,7 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 export default function Header() {
-  const isLoggedIn = true;
+  const isLoggedIn = false;
   const userName = "Mr Pickle";
 
   return (
@@ -14,12 +14,12 @@ export default function Header() {
           <Image
             src="/Logo.svg"
             alt="PicklePickle logo"
-            width={80}
-            height={80}
+            width={100}
+            height={100}
             priority
             className="pp-header__logo"
           />
-          <span className="pp-header__brand-text">PicklePickle</span>
+         <span className="pp-header__brand-text">PicklePickle</span>
         </Link>
 
         {/* Right side */}
