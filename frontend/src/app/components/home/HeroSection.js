@@ -1,6 +1,7 @@
 // src/app/components/home/HeroSection.js
 import Image from "next/image";
 import Container from "../layout/Container";
+import Link from "next/link";
 
 export default function HeroSection() {
   return (
@@ -32,20 +33,13 @@ export default function HeroSection() {
             </p>
 
 
-            <button
-              type="button"
-              className="
-    mt-6 inline-flex items-center justify-center
-    px-8 py-3
-    bg-black text-white
-    text-sm md:text-base font-semibold
-    rounded-sm shadow-md
-    transition-all duration-200
-    hover:bg-zinc-900 hover:scale-[1.02] hover:shadow-lg
-  "
+
+            <Link
+              href="/search"
+              className="mt-6 inline-flex items-center justify-center px-8 py-3 bg-black text-white text-sm md:text-base font-semibold rounded-sm shadow-md transition hover:bg-zinc-900 hover:scale-[1.02] hover:shadow-lg"
             >
               Tìm kiếm ngay
-            </button>
+            </Link>
           </div>
         </Container>
       </div>

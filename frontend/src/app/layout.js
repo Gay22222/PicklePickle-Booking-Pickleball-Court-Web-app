@@ -37,17 +37,17 @@ export default function RootLayout({ children }) {
       suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} ${pickleFont.variable}`}
     >
-      {/* body đóng vai trò wrapper flex để footer dính đáy */}
+      
       <body className="bg-black text-white min-h-screen flex flex-col">
-        {/* Header luôn nằm trên cùng */}
+      
         <Header />
 
-        {/* Nội dung chính chiếm khoảng trống còn lại */}
+        
         <main className="flex-1">
           {children}
         </main>
 
-        {/* Footer luôn ở cuối trang */}
+        
         <Footer />
       </body>
     </html>
