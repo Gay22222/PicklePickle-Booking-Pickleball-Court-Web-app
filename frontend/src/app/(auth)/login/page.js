@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 
 export default function LoginPage() {
   return (
@@ -18,7 +19,7 @@ export default function LoginPage() {
 
         {/* ===== LAYER 2 (CARD FORM) ===== */}
         <div className="absolute top-0 left-[430px] w-[560px] h-[580px] z-10">
-          {/* Ảnh khung card */}
+          {/* Background */}
           <div className="absolute inset-0 rounded-[40px] overflow-hidden">
             <Image
               src="/auth/layer2.png"
@@ -48,7 +49,7 @@ export default function LoginPage() {
               </button>
             </div>
 
-            {/* DIVIDER (ngắn hơn) */}
+            {/* DIVIDER */}
             <div className="flex items-center justify-center gap-4 mb-6">
               <span className="w-24 h-px bg-gray-300" />
               <span className="text-xs text-gray-500">OR</span>
@@ -75,21 +76,6 @@ export default function LoginPage() {
               <div className="relative">
                 <input
                   className="w-full border border-gray-400 rounded-lg px-4 py-3 pr-10 text-sm text-gray-800 placeholder-gray-500 bg-white/90 outline-none focus:ring-2 focus:ring-black focus:border-black transition-colors"
-                  placeholder="Username"
-                  type="text"
-                />
-                <Image
-                  src="/auth/userIcon.svg"
-                  alt=""
-                  width={18}
-                  height={18}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 opacity-60"
-                />
-              </div>
-
-              <div className="relative">
-                <input
-                  className="w-full border border-gray-400 rounded-lg px-4 py-3 pr-10 text-sm text-gray-800 placeholder-gray-500 bg-white/90 outline-none focus:ring-2 focus:ring-black focus:border-black transition-colors"
                   placeholder="Password"
                   type="password"
                 />
@@ -106,9 +92,12 @@ export default function LoginPage() {
             {/* TEXT TRƯỚC, BUTTON SAU */}
             <p className="mt-4 text-xs text-gray-500 text-right">
               Don&apos;t You have account,{" "}
-              <span className="text-blue-500 cursor-pointer hover:underline">
+              <Link
+                href="/register"
+                className="text-blue-500 cursor-pointer hover:underline"
+              >
                 click here.
-              </span>
+              </Link>
             </p>
 
             <button
@@ -119,7 +108,7 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* ===== ROCKET: PHÓNG TO, VẪN NẰM TRONG LAYER 1 ===== */}
+        {/* ===== ROCKET ===== */}
         <div className="absolute left-[30px] top-[140px] w-[400px] h-[340px] z-20 pointer-events-none">
           <Image
             src="/auth/rocketlogin.png"

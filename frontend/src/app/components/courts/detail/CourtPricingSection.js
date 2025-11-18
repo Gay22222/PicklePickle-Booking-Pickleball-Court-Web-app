@@ -29,7 +29,8 @@ export default function CourtPricingSection({ pricing }) {
   const data = pricing ?? defaultPricing;
 
   return (
-    <section className="mt-10">
+    
+    <section className="mt-6 border-t border-dashed border-zinc-200 pt-8">
       {/* Heading */}
       <h2 className="text-center text-2xl md:text-3xl font-semibold text-[#111946]">
         {data.title}

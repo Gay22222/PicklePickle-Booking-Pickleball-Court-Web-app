@@ -1,0 +1,158 @@
+"use client";
+
+import { useParams, useSearchParams, useRouter } from "next/navigation";
+import BookingInfoSection from "../../../../components/courts/booking/BookingInfoSection";
+import AddonsSection from "../../../../components/courts/booking/AddonsSection";
+
+// mock info sân – sau này lấy từ DB
+const COURT_INFO_BY_ID = {
+    "pickoland-thao-dien": {
+        name: "Sân PickoLand Thảo Điền",
+        address: "188 A6 Nguyễn Văn Hưởng, Thảo Điền, TP. Thủ Đức",
+    },
+};
+
+export default function CourtBookingAddonsPage() {
+    const params = useParams();
+    const searchParams = useSearchParams();
+    const router = useRouter();
+
+    const courtId = params?.courtId;
+    const courtInfo =
+        COURT_INFO_BY_ID[courtId] ?? COURT_INFO_BY_ID["pickoland-thao-dien"];
+
+    const dateFromQuery = searchParams.get("date");   // "19/11/2025"
+    const slotsRaw = searchParams.get("slots");       // "Sân 2-13:00,Sân 2-14:00,..."
+
+    const { pricingDetails, totalCourtPrice } = buildPricingDetails(slotsRaw);
+
+    const handleEdit = () => {
+        router.push(`/courts/${courtId}/booking`);
+    };
+
+    const bookingInfoProps = {
+        user: {
+            name: "Mr Pickle 2005",
+            email: "mrpickle2005@gmail.com",
+            avatarUrl: "/courts/Logo.svg",
+        },
+        courtName: courtInfo.name,
+        courtAddress: courtInfo.address,
+        phoneNumber: "09123456789",
+        date: dateFromQuery || "19/11/2025",
+        pricingDetails,
+        totalCourtPrice,
+        onEdit: handleEdit,
+    };
+
+    return (
+        <main className="min-h-screen bg-white">
+            <section className="mx-auto max-w-6xl px-4 py-10 space-y-10">
+                {/* SECTION 1: Info + chi tiết giá */}
+                <BookingInfoSection {...bookingInfoProps} />
+
+                {/* SECTION 2: Dịch vụ thêm */}
+                <AddonsSection />
+
+                {/* Nút tiếp tục */}
+                <div className="flex justify-end">
+                    <button
+                        type="button"
+                        onClick={() => {
+                            // sau này có thể append query: ?courtTotal=...&addonsTotal=...
+                            router.push(`/courts/${courtId}/booking/payment`);
+                        }}
+                        className="mt-4 rounded-md bg-black px-8 py-2.5 text-sm md:text-base font-semibold text-white shadow-sm hover:bg-zinc-800"
+                    >
+                        Tiếp tục
+                    </button>
+                </div>
+
+            </section>
+        </main>
+    );
+
+
+}
+
+/* --------- Helpers: slots -> danh sách dòng và tổng tiền --------- */
+
+function buildPricingDetails(slotsRaw) {
+    if (!slotsRaw) {
+        return { pricingDetails: [], totalCourtPrice: 0 };
+    }
+
+    // parse "Sân 2-13:00" -> { courtLabel, hour }
+    const items = slotsRaw
+        .split(",")
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .map((part) => {
+            const [courtLabel, timeStr] = part.split("-");
+            const hour = parseInt(timeStr.slice(0, 2), 10);
+            return { courtLabel, hour };
+        });
+
+    if (!items.length) {
+        return { pricingDetails: [], totalCourtPrice: 0 };
+    }
+
+    const byCourt = {};
+    for (const item of items) {
+        if (!byCourt[item.courtLabel]) byCourt[item.courtLabel] = [];
+        byCourt[item.courtLabel].push(item.hour);
+    }
+
+    const pricingDetails = [];
+    let totalCourtPrice = 0;
+
+    const pad = (h) => h.toString().padStart(2, "0") + ":00";
+
+    Object.entries(byCourt).forEach(([courtLabel, hoursArr]) => {
+        const sorted = [...hoursArr].sort((a, b) => a - b);
+
+        let start = sorted[0];
+        let prev = sorted[0];
+
+        const flushSegment = (segmentStart, segmentEnd) => {
+            const hoursCount = segmentEnd - segmentStart + 1;
+            const pricePerHour = getPriceForHour(segmentStart); // mock rule
+            const totalPrice = pricePerHour * hoursCount;
+            totalCourtPrice += totalPrice;
+
+            pricingDetails.push({
+                id: `${courtLabel}-${segmentStart}`,
+                courtLabel,
+                timeRange: `${pad(segmentStart)} - ${pad(segmentEnd + 1)}`,
+                totalPrice,
+            });
+        };
+
+        for (let i = 1; i < sorted.length; i++) {
+            const h = sorted[i];
+            if (h === prev + 1) {
+                prev = h;
+            } else {
+                flushSegment(start, prev);
+                start = h;
+                prev = h;
+            }
+        }
+        flushSegment(start, prev);
+    });
+
+    return { pricingDetails, totalCourtPrice };
+}
+
+/**
+ * Rule mock giá theo giờ:
+ *  - 05–09h: 100k
+ *  - 09–16h: 120k
+ *  - 16–23h: 150k
+ */
+function getPriceForHour(hour) {
+    if (hour >= 5 && hour < 9) return 100000;
+    if (hour >= 9 && hour < 16) return 120000;
+    if (hour >= 16 && hour < 23) return 150000;
+    return 120000;
+}

@@ -2,8 +2,11 @@
 
 import { useState, useEffect } from "react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 
 export default function CourtHeroSection({ court }) {
+  const router = useRouter();
+
   const {
     name,
     address,
@@ -68,8 +71,13 @@ export default function CourtHeroSection({ court }) {
 
         {/* Buttons */}
         <div className="flex flex-wrap gap-3">
-          <button
+           <button
             type="button"
+            onClick={() => {
+              // dùng court.id nếu có, fallback courtId mock
+              const targetId = court?.id || "pickoland-thao-dien";
+              router.push(`/courts/${targetId}/booking`);
+            }}
             className="inline-flex items-center gap-2 rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-900 shadow-sm transition hover:bg-zinc-50"
           >
             <span>Đặt sân</span>
