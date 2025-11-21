@@ -1,58 +1,144 @@
-"use client";
-
-
 import Image from "next/image";
-import BookingStatusBadge from "./BookingStatusBadge";
 
 export default function BookingHistoryCard({ booking }) {
   const {
     courtName,
     courtCode,
-    location,
-    imageUrl,
     date,
     startTime,
     endTime,
-    status,
     statusLabel,
-    totalPrice,
-    id,
+    rating,
+    reviews,
+    imageUrl,
+    isFavorite,
   } = booking;
 
   return (
-    <div className="w-full">
+    <article className="flex w-full rounded-[16px] bg-[#f5f5f5] border border-[#e5e5e5] overflow-hidden">
       {/* Ảnh sân */}
-      <div>
+      <div className="relative w-[260px] h-[150px] flex-shrink-0">
         <Image
           src={imageUrl}
           alt={courtName}
-          width={240}
-          height={160}
+          fill
           className="object-cover"
         />
       </div>
 
-      {/* Thông tin chi tiết */}
-      <div>
-        <div>
-          <h3>{courtName}</h3>
-          <p>Code: {courtCode}</p>
+      {/* Nội dung */}
+      <div className="flex flex-1 items-stretch justify-between px-5 py-4 gap-4">
+        {/* Khối trái */}
+        <div className="flex flex-col gap-2 flex-1">
+          {/* Tên sân + tim */}
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-1">
+
+              <h3 className="text-[15px] font-semibold leading-snug text-black">
+                {courtName}
+              </h3>
+
+              <div className="flex items-center gap-2 text-[11px] text-[#555]">
+                <div className="flex items-center gap-1">
+                  <Image
+                    src="/history/starIcon.svg"
+                    alt="star"
+                    width={12}
+                    height={12}
+                  />
+                  <span className="font-semibold">{rating.toFixed(1)}</span>
+                </div>
+                <span className="text-[#777]">Code: {courtCode}</span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              aria-label="Yêu thích"
+              className="mt-1"
+            >
+              <Image
+                src={
+                  isFavorite
+                    ? "/history/hearfillIcon.svg"
+                    : "/history/heartIcon.svg"
+                }
+                alt="favorite"
+                width={20}
+                height={20}
+              />
+            </button>
+          </div>
+
+          {/* Ngày + trạng thái */}
+          <div className="flex flex-wrap items-center gap-4 text-[11px] text-[#555]">
+            <div className="flex items-center gap-1">
+              <Image
+                src="/history/calendarIcon.svg"
+                alt="calendar"
+                width={12}
+                height={12}
+              />
+              <span>{date}</span>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <Image
+                src="/history/bellIcon.svg"
+                alt="status"
+                width={12}
+                height={12}
+              />
+              <span>Trạng thái: {statusLabel}</span>
+            </div>
+          </div>
+
+          {/* Thời gian */}
+          <div className="flex flex-wrap items-center gap-6 text-[11px] text-[#555]">
+            <p>
+              Bắt đầu: <span className="font-medium">{startTime}</span>
+            </p>
+            <p>
+              Kết thúc: <span className="font-medium">{endTime}</span>
+            </p>
+          </div>
         </div>
 
-        <p>{location}</p>
+        {/* Khối phải */}
+        <div className="flex flex-col justify-between items-end min-w-[140px]">
+          {/* Rating + reviews */}
+          <div className="flex flex-col items-end gap-1">
+            <div className="flex items-center gap-2">
 
-        <p>
-          Ngày chơi: {date} • {startTime} - {endTime}
-        </p>
+              <div className="flex items-center justify-center w-8 h-5 rounded-full bg-[#6b6b6b] text-[11px] text-white">
+                {rating.toFixed(1)}
+              </div>
+              <span className="text-[11px] text-[#777]">
+                {reviews} reviews
+              </span>
+            </div>
+          </div>
 
-        <p>Mã đặt sân: {id}</p>
 
-        <p>Tổng tiền: {totalPrice.toLocaleString("vi-VN")} đ</p>
+          <div className="flex items-center gap-2">
+            {/* Chi tiết: nền xám nhạt */}
+            <button
+              type="button"
+              className="px-4 py-[6px] rounded-[30px] border border-[#c4c4c4] text-[11px] text-[#333] bg-[#f7f7f7] hover:bg-[#ebebeb] transition"
+            >
+              Chi tiết
+            </button>
 
-        <BookingStatusBadge status={status} label={statusLabel} />
-
-        {/* Sau này có thể thêm nút: Xem chi tiết, Đặt lại, Hủy, v.v. */}
+            {/* Hủy sân: nền trắng */}
+            <button
+              type="button"
+              className="px-4 py-[6px] rounded-[30px] border border-[#c4c4c4] text-[11px] text-[#333] bg-white hover:bg-[#f0f0f0] transition"
+            >
+              Hủy sân
+            </button>
+          </div>
+        </div>
       </div>
-    </div>
+    </article>
   );
 }

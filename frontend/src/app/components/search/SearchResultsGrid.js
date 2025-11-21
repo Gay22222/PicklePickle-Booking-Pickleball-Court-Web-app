@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import CourtCard from "../courts/CourtCard";
-import Pagination from "./Pagination";
+import Pagination from "../layout/Pagination";
 
 const mockCourts = Array.from({ length: 21 }).map((_, index) => ({
   id: index + 1,

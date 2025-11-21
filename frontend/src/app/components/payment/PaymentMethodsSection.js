@@ -26,9 +26,7 @@ const PAYMENT_METHODS = [
 export default function PaymentMethodsSection({ selectedId, onChange }) {
   return (
     <section className="space-y-4">
-      <h2 className="text-lg md:text-xl font-semibold text-black">
-        Phương thức thanh toán
-      </h2>
+      
 
       <div className="space-y-3">
         {PAYMENT_METHODS.map((method) => {
