@@ -1,30 +1,36 @@
-'use strict'
+// src/app.js
+import Fastify from "fastify";
+import cors from "@fastify/cors";
+import { config } from "./config/env.js";
 
-const path = require('node:path')
-const AutoLoad = require('@fastify/autoload')
+// sau này import các module routes ở đây
+// import { registerAuthRoutes } from "./modules/auth/auth.routes.js";
+// import { registerCourtRoutes } from "./modules/courts/court.routes.js";
 
-// Pass --options via CLI arguments in command to enable these options.
-const options = {}
+export function buildApp() {
+  const app = Fastify({
+    logger: true,
+  });
 
-module.exports = async function (fastify, opts) {
-  // Place here your custom code!
+  // CORS
+  app.register(cors, {
+    origin: config.corsOrigin,
+    credentials: true,
+  });
 
-  // Do not touch the following lines
+  // Healthcheck cho Docker (wget http://localhost:4000/healthz)
+  app.get("/healthz", async () => {
+    return {
+      ok: true,
+      ts: Date.now(),
+    };
+  });
 
-  // This loads all plugins defined in plugins
-  // those should be support plugins that are reused
-  // through your application
-  fastify.register(AutoLoad, {
-    dir: path.join(__dirname, 'plugins'),
-    options: Object.assign({}, opts)
-  })
+  // TODO: register các module thực tế
+  // app.register(registerAuthRoutes, { prefix: "/api/auth" });
+  // app.register(registerCourtRoutes, { prefix: "/api/courts" });
+  // app.register(registerBookingRoutes, { prefix: "/api/bookings" });
+  // ...
 
-  // This loads all plugins defined in routes
-  // define your routes in one of these
-  fastify.register(AutoLoad, {
-    dir: path.join(__dirname, 'routes'),
-    options: Object.assign({}, opts)
-  })
+  return app;
 }
-
-module.exports.options = options

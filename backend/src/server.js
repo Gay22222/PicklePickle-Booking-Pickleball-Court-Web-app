@@ -1,17 +1,28 @@
-import Fastify from 'fastify';
-import autoload from '@fastify/autoload';
-import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
+// server.js
+import "dotenv/config";        // để đọc file .env ở root
+import { buildApp } from "./app.js";
+import { connectMongo } from "./config/mongo.js";
+import { config } from "./config/env.js";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const fastify = Fastify({ logger: true });
+async function start() {
+  try {
+    // 1. Kết nối Mongo
+    await connectMongo();
 
-// nạp plugins & routes
-fastify.register(autoload, { dir: join(__dirname, '../plugins') });
-fastify.register(autoload, { dir: join(__dirname, '../routes') });
+    // 2. Khởi tạo Fastify app
+    const app = buildApp();
 
-// health check
-fastify.get('/health', async () => ({ ok: true, ts: Date.now() }));
+    // 3. Lắng nghe
+    await app.listen({
+      port: config.port,
+      host: "0.0.0.0",
+    });
 
-const port = process.env.PORT || 4000;
-fastify.listen({ host: '0.0.0.0', port });
+    console.log(`API running on http://0.0.0.0:${config.port}`);
+  } catch (err) {
+    console.error("Failed to start server:", err);
+    process.exit(1);
+  }
+}
+
+start();
