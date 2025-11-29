@@ -1,4 +1,4 @@
-// src/app/layout.js
+
 import { Geist, Geist_Mono, Baloo_2, Inter } from "next/font/google";
 import "./globals.css";
 import Header from "./components/layout/Header";

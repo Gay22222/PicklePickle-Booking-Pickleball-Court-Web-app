@@ -1,91 +1,94 @@
+"use client";
+
+import { use, useEffect, useState } from "react";
 import CourtHeroSection from "@/app/components/courts/detail/CourtHeroSection";
 import CourtOverviewSection from "@/app/components/courts/detail/CourtOverviewSection";
 import CourtPricingSection from "@/app/components/courts/detail/CourtPricingSection";
 
-// 🎯 Mock data theo courtId
-const mockCourts = {
-  "pickoland-thao-dien": {
-    id: "pickoland-thao-dien",
-    name: "PickoLand Thảo Điền Pickleball Club",
-    shortName: "PickoLand",
-    address:
-      "188 A6 Nguyễn Văn Hưởng, Thảo Điền, Thủ Đức, Hồ Chí Minh, Vietnam",
-    phone: "0903 396 059",
-    description:
-      "Câu lạc bộ PickoLand Thảo Điền Pickleball là một trong những địa điểm chơi pickleball phổ biến nhất tại TP. Hồ Chí Minh, Việt Nam. Ở đây có 5 sân ngoài trời mặt cứng. Tất cả đều là sân chuyên dụng với vạch kẻ và lưới cố định. Để chơi, bạn cần có hội viên. Có thể đặt sân trước. Cơ sở vật chất bao gồm nhà vệ sinh, hệ thống đèn chiếu sáng và cửa hàng pro shop/thiết bị.",
-    heroImages: [
-      "/courts/sample1.png",
-      "/courts/sample2.png",
-      "/courts/sample3.png",
-    ],
-    overview: {
-      featureLeft: [
-        "Mặt sân cứng, độ nảy chuẩn thi đấu",
-        "5 sân ngoài trời, mái che một phần",
-        "Hệ thống chiếu sáng thi đấu ban đêm",
-      ],
-      featureRight: [
-        "Vạch kẻ cố định theo chuẩn Pickleball",
-        "Lưới căng cố định, chiều cao tiêu chuẩn",
-        "Khu vực non-volley zone (kitchen) rõ ràng",
-      ],
-      amenitiesLeft: [
-        "Đồ ăn & nước uống ngay trong khu compound",
-        "Phòng vệ sinh & phòng thay đồ sạch sẽ",
-        "Cửa hàng dụng cụ & phụ kiện Pickleball",
-        "Khu vực nghỉ ngơi, ghế ngồi cho khán giả",
-      ],
-      amenitiesRight: [
-        "Hệ thống đèn thi đấu ban đêm",
-        "Không gian phù hợp tổ chức giải, sự kiện",
-        "Bãi gửi xe xung quanh khu vực sân",
-      ],
-      featureImages: Array(5).fill("/courts/mockupduplicate.png"),
-      amenityImages: Array(5).fill("/courts/mockupduplicate.png"),
-      logoSrc: "/courts/Logo.svg",
-    },
-    pricing: {
-      title: "Bảng giá sân PickoLand",
-      rows: [
-        {
-          day: "T2 - T6",
-          slots: [
-            { time: "9h - 16h", fixed: "80.000đ/h", walkin: "90.000đ/h" },
-          ],
-        },
-        {
-          day: "T2 - CN",
-          slots: [
-            { time: "5h - 9h", fixed: "100.000đ/h", walkin: "110.000đ/h" },
-            { time: "16h - 23h", fixed: "100.000đ/h", walkin: "110.000đ/h" },
-          ],
-        },
-        {
-          day: "T7 - CN",
-          slots: [
-            { time: "9h - 16h", fixed: "100.000đ/h", walkin: "110.000đ/h" },
-          ],
-        },
-      ],
-    },
-  },
-
-  // sau này bạn chỉ cần thêm sân mới ở đây
-  // "another-court-id": { ... }
-};
-
-const defaultCourt = mockCourts["pickoland-thao-dien"];
-
 export default function CourtDetailPage({ params }) {
-  const { courtId } = params;
-  const court = mockCourts[courtId] ?? defaultCourt;
+  // Next.js 16 turbo: params là Promise
+  const { courtId } = use(params); // thực chất là venueId
+
+  const [court, setCourt] = useState(null);
+  const [overview, setOverview] = useState(null);
+  const [pricing, setPricing] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function fetchDetail() {
+      try {
+        setLoading(true);
+        setError("");
+
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_API_BASE}/venues/${courtId}/detail`,
+          { cache: "no-store" } // tránh cache khi dev
+        );
+
+        if (!res.ok) {
+          throw new Error(`Failed to fetch venue detail (${res.status})`);
+        }
+
+        const json = await res.json();
+        const data = json.data;
+
+        if (!data || !data.court) {
+          throw new Error("Venue detail is empty");
+        }
+
+        if (!isMounted) return;
+
+        setCourt(data.court);
+        setOverview(data.overview);
+        setPricing(data.pricing);
+      } catch (err) {
+        console.error(err);
+        if (!isMounted) return;
+        setError("Không tải được thông tin sân. Vui lòng thử lại sau.");
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+
+    fetchDetail();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [courtId]);
+
+  if (loading && !court) {
+    return (
+      <main className="min-h-screen bg-white">
+        <section className="mx-auto max-w-6xl px-4 py-8">
+          <p className="text-sm text-zinc-600">Đang tải thông tin sân...</p>
+        </section>
+      </main>
+    );
+  }
+
+  if (!court) {
+    return (
+      <main className="min-h-screen bg-white">
+        <section className="mx-auto max-w-6xl px-4 py-8">
+          <p className="text-sm text-red-500">
+            {error || "Không tìm thấy sân."}
+          </p>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-white">
       <section className="mx-auto max-w-6xl space-y-10 px-4 py-8">
-        <CourtHeroSection court={court} />
-        <CourtOverviewSection overview={court.overview} />
-        <CourtPricingSection pricing={court.pricing} />
+        {/* Truyền thêm venueId xuống Hero */}
+        <CourtHeroSection court={court} venueId={courtId} />
+        <CourtOverviewSection overview={overview} />
+        <CourtPricingSection pricing={pricing} />
       </section>
     </main>
   );

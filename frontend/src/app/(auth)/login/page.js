@@ -1,12 +1,67 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE;
 
 export default function LoginPage() {
+  const router = useRouter();
+
+  const [identifier, setIdentifier] = useState(""); // email hoặc phone
+  const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+
+    if (!identifier.trim() || !password.trim()) {
+      setError("Please enter your email and password");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier, password }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.message || "Login failed");
+      }
+
+      if (data.token) {
+        localStorage.setItem("pp_token", data.token);
+      }
+      if (data.user) {
+        localStorage.setItem("pp_user", JSON.stringify(data.user));
+      }
+
+      // Báo cho Header biết auth đã thay đổi
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("pp-auth-changed"));
+      }
+
+      router.push("/");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="relative w-full min-h-screen flex items-center justify-center bg-[#f4f4f4]">
       {/* WRAPPER */}
       <div className="relative w-[1100px] h-[580px]">
-        {/* ===== LAYER 1 (BACKGROUND) ===== */}
+        {/* LAYER 1 */}
         <div className="absolute top-0 left-0 w-[560px] h-[580px] rounded-[40px] overflow-hidden z-0">
           <Image
             src="/auth/layer1.png"
@@ -17,9 +72,8 @@ export default function LoginPage() {
           />
         </div>
 
-        {/* ===== LAYER 2 (CARD FORM) ===== */}
+        {/* LAYER 2 */}
         <div className="absolute top-0 left-[430px] w-[560px] h-[580px] z-10">
-          {/* Background */}
           <div className="absolute inset-0 rounded-[40px] overflow-hidden">
             <Image
               src="/auth/layer2.png"
@@ -44,7 +98,12 @@ export default function LoginPage() {
               </button>
 
               <button className="flex items-center gap-2 border border-gray-400 rounded-lg px-4 py-2 text-sm text-gray-800 hover:bg-gray-50 cursor-pointer transition">
-                <Image src="/auth/facebookIcon.svg" alt="" width={20} height={20} />
+                <Image
+                  src="/auth/facebookIcon.svg"
+                  alt=""
+                  width={20}
+                  height={20}
+                />
                 <span>Log in Facebook</span>
               </button>
             </div>
@@ -57,12 +116,14 @@ export default function LoginPage() {
             </div>
 
             {/* FORM INPUTS */}
-            <div className="flex flex-col gap-4">
+            <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
               <div className="relative">
                 <input
                   className="w-full border border-gray-400 rounded-lg px-4 py-3 pr-10 text-sm text-gray-800 placeholder-gray-500 bg-white/90 outline-none focus:ring-2 focus:ring-black focus:border-black transition-colors"
-                  placeholder="Email"
-                  type="email"
+                  placeholder="Email or phone"
+                  type="text"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
                 />
                 <Image
                   src="/auth/emailIcon.svg"
@@ -78,6 +139,8 @@ export default function LoginPage() {
                   className="w-full border border-gray-400 rounded-lg px-4 py-3 pr-10 text-sm text-gray-800 placeholder-gray-500 bg-white/90 outline-none focus:ring-2 focus:ring-black focus:border-black transition-colors"
                   placeholder="Password"
                   type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
                 />
                 <Image
                   src="/auth/lockIcon.svg"
@@ -87,28 +150,33 @@ export default function LoginPage() {
                   className="absolute right-4 top-1/2 -translate-y-1/2 opacity-60"
                 />
               </div>
-            </div>
 
-            {/* TEXT TRƯỚC, BUTTON SAU */}
-            <p className="mt-4 text-xs text-gray-500 text-right">
-              Don&apos;t You have account,{" "}
-              <Link
-                href="/register"
-                className="text-blue-500 cursor-pointer hover:underline"
+              {error && (
+                <p className="text-xs text-red-500 text-right mt-1">{error}</p>
+              )}
+
+              <p className="mt-2 text-xs text-gray-500 text-right">
+                Don&apos;t you have an account?{" "}
+                <Link
+                  href="/register"
+                  className="text-blue-500 cursor-pointer hover:underline"
+                >
+                  click here.
+                </Link>
+              </p>
+
+              <button
+                type="submit"
+                disabled={submitting}
+                className="mt-4 w-1/2 mx-auto py-3 rounded-full bg-black text-white text-sm hover:bg-black/80 hover:shadow-lg transition duration-150 active:translate-y-[1px] disabled:opacity-60"
               >
-                click here.
-              </Link>
-            </p>
-
-            <button
-              className="mt-4 w-1/2 mx-auto py-3 rounded-full bg-black text-white text-sm hover:bg-black/80 hover:shadow-lg transition duration-150 active:translate-y-[1px]"
-            >
-              CONFIRM
-            </button>
+                {submitting ? "Logging in..." : "CONFIRM"}
+              </button>
+            </form>
           </div>
         </div>
 
-        {/* ===== ROCKET ===== */}
+        {/* ROCKET */}
         <div className="absolute left-[30px] top-[140px] w-[400px] h-[340px] z-20 pointer-events-none">
           <Image
             src="/auth/rocketlogin.png"

@@ -1,15 +1,57 @@
-// src/app/components/layout/Header.js
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 export default function Header() {
-  const isLoggedIn = false;
-  const userName = "Mr Pickle";
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userName, setUserName] = useState("");
+  const router = useRouter();
+
+  const syncFromStorage = () => {
+    if (typeof window === "undefined") return;
+    const token = localStorage.getItem("pp_token");
+    const rawUser = localStorage.getItem("pp_user");
+
+    if (token && rawUser) {
+      try {
+        const user = JSON.parse(rawUser);
+        setIsLoggedIn(true);
+        setUserName(user.fullName || user.email || "User");
+      } catch {
+        setIsLoggedIn(false);
+        setUserName("");
+      }
+    } else {
+      setIsLoggedIn(false);
+      setUserName("");
+    }
+  };
+
+  useEffect(() => {
+    syncFromStorage();
+    if (typeof window === "undefined") return;
+    const handler = () => syncFromStorage();
+    window.addEventListener("pp-auth-changed", handler);
+    return () => window.removeEventListener("pp-auth-changed", handler);
+  }, []);
+
+  const handleLogout = (e) => {
+    // tránh click logout cũng trigger vào avatar
+    e.stopPropagation();
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("pp_token");
+      localStorage.removeItem("pp_user");
+      window.dispatchEvent(new Event("pp-auth-changed"));
+    }
+    router.push("/login");
+  };
 
   return (
     <header className="pp-header">
       <nav className="pp-header__inner">
-        {/* Logo + brand */}
         <Link href="/" className="pp-header__brand">
           <Image
             src="/Logo.svg"
@@ -19,14 +61,12 @@ export default function Header() {
             priority
             className="pp-header__logo"
           />
-         <span className="pp-header__brand-text">PicklePickle</span>
+          <span className="pp-header__brand-text">PicklePickle</span>
         </Link>
 
-        {/* Right side */}
         <div className="pp-header__right">
           {isLoggedIn ? (
             <>
-              {/* Thông báo */}
               <button className="pp-header__icon-btn" type="button">
                 <Image
                   src="/notificationIcon.svg"
@@ -38,8 +78,11 @@ export default function Header() {
                 <span>Thông báo</span>
               </button>
 
-              {/* Lịch sử */}
-              <button className="pp-header__icon-btn" type="button">
+              <button
+                className="pp-header__icon-btn"
+                type="button"
+                onClick={() => router.push("/history")}
+              >
                 <Image
                   src="/historyIcon.svg"
                   alt="Lịch sử"
@@ -50,25 +93,41 @@ export default function Header() {
                 <span>Lịch sử</span>
               </button>
 
-              {/* User */}
-              <div className="pp-header__user">
+              {/* CLICK AVATAR → PROFILE */}
+              <div
+                className="pp-header__user cursor-pointer"
+                onClick={() => router.push("/account/profile")}
+              >
                 <div className="pp-header__avatar">
                   <Image
                     src="/Logo.svg"
-                    alt={userName}
+                    alt={userName || "User"}
                     width={32}
                     height={32}
                   />
                 </div>
                 <span className="pp-header__user-text">
                   Chào,&nbsp;
-                  <span className="pp-header__user-name">{userName}</span>
+                  <span className="pp-header__user-name">
+                    {userName || "User"}
+                  </span>
                 </span>
+
+                <button
+                  type="button"
+                  className="pp-header__link pp-header__link--strong ml-3"
+                  onClick={handleLogout}
+                >
+                  Đăng xuất
+                </button>
               </div>
             </>
           ) : (
             <>
-              <button className="pp-header__link pp-header__dropdown" type="button">
+              <button
+                className="pp-header__link pp-header__dropdown"
+                type="button"
+              >
                 <span>Tin tức</span>
                 <span className="pp-header__caret">▾</span>
               </button>
@@ -79,7 +138,10 @@ export default function Header() {
 
               <span className="pp-header__divider" />
 
-              <Link href="/register" className="pp-header__link pp-header__link--strong">
+              <Link
+                href="/register"
+                className="pp-header__link pp-header__link--strong"
+              >
                 Đăng ký
               </Link>
             </>

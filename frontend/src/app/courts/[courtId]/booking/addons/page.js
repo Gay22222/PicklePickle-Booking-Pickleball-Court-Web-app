@@ -1,16 +1,23 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
+
 import BookingInfoSection from "../../../../components/courts/booking/BookingInfoSection";
+import BookingInfoGuestSection from "../../../../components/courts/booking/BookingInfoGuestSection";
 import AddonsSection from "../../../../components/courts/booking/AddonsSection";
 
-// mock info sân – sau này lấy từ DB
-const COURT_INFO_BY_ID = {
-    "pickoland-thao-dien": {
-        name: "Sân PickoLand Thảo Điền",
-        address: "188 A6 Nguyễn Văn Hưởng, Thảo Điền, TP. Thủ Đức",
-    },
+// Fallback nếu chưa fetch được từ API
+const FALLBACK_VENUE = {
+    name: "PicklePickle Quận 1",
+    address: "45 Lê Lợi, Quận 1, TP.HCM",
 };
+
+
+const USER_STORAGE_KEY = "pp_user";
+const TOKEN_STORAGE_KEYS = ["pp_token"];
+const PAYMENT_DRAFT_KEY = "pp_booking_payment_draft";
+
 
 export default function CourtBookingAddonsPage() {
     const params = useParams();
@@ -18,71 +25,217 @@ export default function CourtBookingAddonsPage() {
     const router = useRouter();
 
     const courtId = params?.courtId;
-    const courtInfo =
-        COURT_INFO_BY_ID[courtId] ?? COURT_INFO_BY_ID["pickoland-thao-dien"];
+    const dateFromQuery = searchParams.get("date"); // "24/11/2025"
+    const slotsRaw = searchParams.get("slots");     // "Sân 2-13:00,Sân 2-14:00,..."
 
-    const dateFromQuery = searchParams.get("date");   // "19/11/2025"
-    const slotsRaw = searchParams.get("slots");       // "Sân 2-13:00,Sân 2-14:00,..."
+    const [venueName, setVenueName] = useState(FALLBACK_VENUE.name);
+    const [venueAddress, setVenueAddress] = useState(FALLBACK_VENUE.address);
 
+    const [currentUser, setCurrentUser] = useState(null);
+    const [isAuth, setIsAuth] = useState(false);
+    const [loadingUser, setLoadingUser] = useState(true);
+
+    const [guestInfo, setGuestInfo] = useState({
+        name: "",
+        email: "",
+        phone: "",
+    });
+
+    const [addonsSummary, setAddonsSummary] = useState({
+        items: [],
+        addonsTotal: 0,
+    });
+
+    /* ===================== LẤY THÔNG TIN SÂN ===================== */
+    useEffect(() => {
+        if (!courtId) return;
+
+        let cancelled = false;
+
+        (async () => {
+            try {
+                const res = await fetch(
+                    `${process.env.NEXT_PUBLIC_API_BASE}/venues/${courtId}/detail`
+                );
+                if (!res.ok) return;
+
+                const json = await res.json();
+                const court = json.data?.court || json.data;
+
+                if (!court || cancelled) return;
+
+                setVenueName(court.name || FALLBACK_VENUE.name);
+                setVenueAddress(court.address || FALLBACK_VENUE.address);
+            } catch (err) {
+                console.error("fetch venue detail error", err);
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [courtId]);
+
+    /* ===================== CHECK LOGIN TỪ LOCALSTORAGE ===================== */
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+
+        let parsedUser = null;
+
+        // 1. Lấy user từ pp_user
+        const rawUser = localStorage.getItem(USER_STORAGE_KEY);
+        if (rawUser) {
+            try {
+                parsedUser = JSON.parse(rawUser);
+            } catch (err) {
+                console.error("Cannot parse pp_user", err);
+            }
+        }
+
+        // 2. Kiểm tra có token pp_token không
+        let hasToken = false;
+        for (const key of TOKEN_STORAGE_KEYS) {
+            if (localStorage.getItem(key)) {
+                hasToken = true;
+                break;
+            }
+        }
+
+        if (parsedUser || hasToken) {
+            setIsAuth(true);
+            setCurrentUser(parsedUser || {});
+
+            // Prefill luôn form guest nếu có sẵn thông tin
+            setGuestInfo((prev) => ({
+                ...prev,
+                name:
+                    parsedUser?.fullName ||
+                    parsedUser?.name ||
+                    parsedUser?.username ||
+                    prev.name,
+                email: parsedUser?.email || prev.email,
+                phone:
+                    parsedUser?.phone ||
+                    parsedUser?.phoneNumber ||
+                    parsedUser?.mobile ||
+                    prev.phone,
+            }));
+        } else {
+            setIsAuth(false);
+            setCurrentUser(null);
+        }
+
+        setLoadingUser(false);
+    }, []);
+
+    /* ===================== BUILD BẢNG GIÁ & TỔNG TIỀN ===================== */
     const { pricingDetails, totalCourtPrice } = buildPricingDetails(slotsRaw);
 
     const handleEdit = () => {
         router.push(`/courts/${courtId}/booking`);
     };
 
-    const bookingInfoProps = {
-        user: {
-            name: "Mr Pickle 2005",
-            email: "mrpickle2005@gmail.com",
-            avatarUrl: "/courts/Logo.svg",
-        },
-        courtName: courtInfo.name,
-        courtAddress: courtInfo.address,
-        phoneNumber: "09123456789",
-        date: dateFromQuery || "19/11/2025",
+    const displayDate = dateFromQuery || new Date().toLocaleDateString("vi-VN");
+
+    // Props dùng chung cho 2 phiên bản BookingInfo
+    const bookingInfoCommon = {
+        courtName: venueName,
+        courtAddress: venueAddress,
+        phoneNumber:
+            currentUser?.phone ||
+            currentUser?.phoneNumber ||
+            guestInfo.phone ||
+            "",
+        date: displayDate,
         pricingDetails,
         totalCourtPrice,
         onEdit: handleEdit,
     };
 
+    const handleGuestInfoChange = (next) => setGuestInfo(next);
+
+    const handleContinue = () => {
+        // chuẩn bị dữ liệu cần cho hóa đơn
+        const draft = {
+            courtId,
+            date: displayDate,
+            courtName: venueName,
+            courtAddress: venueAddress,
+            // chi tiết khung giờ + tiền sân
+            courtPricingDetails: pricingDetails,
+            courtTotal: totalCourtPrice,
+            // dịch vụ thêm (AddonsSection đã trả ra addonsSummary)
+            addons: addonsSummary,
+        };
+
+        if (typeof window !== "undefined") {
+            localStorage.setItem(PAYMENT_DRAFT_KEY, JSON.stringify(draft));
+        }
+
+        router.push(`/courts/${courtId}/booking/payment`);
+    };
+
+
     return (
         <main className="min-h-screen bg-white">
             <section className="mx-auto max-w-6xl px-4 py-10 space-y-10">
                 {/* SECTION 1: Info + chi tiết giá */}
-                <BookingInfoSection {...bookingInfoProps} />
+                {loadingUser ? (
+                    <div className="rounded-3xl border border-zinc-200 bg-white px-6 py-6 md:px-10 md:py-8">
+                        <p className="text-sm text-zinc-500">
+                            Đang tải thông tin khách hàng...
+                        </p>
+                    </div>
+                ) : isAuth && currentUser ? (
+                    <BookingInfoSection
+                        user={{
+                            name:
+                                currentUser.fullName ||
+                                currentUser.name ||
+                                currentUser.username ||
+                                currentUser.email ||
+                                "Khách hàng",
+                            email: currentUser.email || "",
+                            avatarUrl:
+                                currentUser.avatarUrl ||
+                                currentUser.avatar ||
+                                "/courts/Logo.svg",
+                        }}
+                        {...bookingInfoCommon}
+                    />
+                ) : (
+                    <BookingInfoGuestSection
+                        guestInfo={guestInfo}
+                        onChangeGuestInfo={handleGuestInfoChange}
+                        {...bookingInfoCommon}
+                    />
+                )}
 
                 {/* SECTION 2: Dịch vụ thêm */}
-                <AddonsSection />
+                <AddonsSection onChange={setAddonsSummary} />
 
                 {/* Nút tiếp tục */}
                 <div className="flex justify-end">
                     <button
                         type="button"
-                        onClick={() => {
-                            // sau này có thể append query: ?courtTotal=...&addonsTotal=...
-                            router.push(`/courts/${courtId}/booking/payment`);
-                        }}
+                        onClick={handleContinue}
                         className="mt-4 rounded-md bg-black px-8 py-2.5 text-sm md:text-base font-semibold text-white shadow-sm hover:bg-zinc-800"
                     >
                         Tiếp tục
                     </button>
                 </div>
-
             </section>
         </main>
     );
-
-
 }
 
-/* --------- Helpers: slots -> danh sách dòng và tổng tiền --------- */
+/* ===================== Helpers: slots -> rows & total ===================== */
 
 function buildPricingDetails(slotsRaw) {
     if (!slotsRaw) {
         return { pricingDetails: [], totalCourtPrice: 0 };
     }
 
-    // parse "Sân 2-13:00" -> { courtLabel, hour }
     const items = slotsRaw
         .split(",")
         .map((part) => part.trim())
@@ -116,7 +269,7 @@ function buildPricingDetails(slotsRaw) {
 
         const flushSegment = (segmentStart, segmentEnd) => {
             const hoursCount = segmentEnd - segmentStart + 1;
-            const pricePerHour = getPriceForHour(segmentStart); // mock rule
+            const pricePerHour = getPriceForHour(segmentStart);
             const totalPrice = pricePerHour * hoursCount;
             totalCourtPrice += totalPrice;
 
@@ -144,12 +297,6 @@ function buildPricingDetails(slotsRaw) {
     return { pricingDetails, totalCourtPrice };
 }
 
-/**
- * Rule mock giá theo giờ:
- *  - 05–09h: 100k
- *  - 09–16h: 120k
- *  - 16–23h: 150k
- */
 function getPriceForHour(hour) {
     if (hour >= 5 && hour < 9) return 100000;
     if (hour >= 9 && hour < 16) return 120000;

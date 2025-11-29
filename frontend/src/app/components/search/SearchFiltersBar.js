@@ -1,22 +1,25 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
 
-export default function SearchFiltersBar() {
-  const [keyword, setKeyword] = useState("");
-  const [date, setDate] = useState("");
-  const [startTime, setStartTime] = useState("");
-  const [endTime, setEndTime] = useState("");
-  const [area, setArea] = useState("");
-
-  const totalCourts = 10;
-  const totalAreas = 50;
+export default function SearchFiltersBar({
+  filters,
+  onChangeFilters,
+  onApplyFilters,
+  onChangeAreaLive,
+  stats,
+  loading,
+}) {
+  const { keyword, date, startTime, endTime, area } = filters;
+  const totalCourts = stats?.totalCourts ?? 0;
+  const totalAreas = stats?.totalAreas ?? 0;
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    console.log({ keyword, date, startTime, endTime, area });
+    if (onApplyFilters) onApplyFilters();
   };
+
+  const update = (patch) => onChangeFilters(patch);
 
   return (
     <div>
@@ -37,14 +40,14 @@ export default function SearchFiltersBar() {
                 type="text"
                 placeholder="PicklePickle"
                 value={keyword}
-                onChange={(e) => setKeyword(e.target.value)}
+                onChange={(e) => update({ keyword: e.target.value })}
                 className="w-full border-0 bg-transparent text-sm font-medium text-zinc-900 outline-none placeholder:text-zinc-400"
               />
             </div>
             <button
               type="button"
               className="text-xs text-zinc-500 hover:text-zinc-700"
-              onClick={() => setKeyword("")}
+              onClick={() => update({ keyword: "" })}
             >
               ×
             </button>
@@ -63,7 +66,7 @@ export default function SearchFiltersBar() {
               <input
                 type="date"
                 value={date}
-                onChange={(e) => setDate(e.target.value)}
+                onChange={(e) => update({ date: e.target.value })}
                 className="w-full border-0 bg-transparent text-sm font-medium text-zinc-900 outline-none"
               />
             </div>
@@ -82,7 +85,7 @@ export default function SearchFiltersBar() {
               <input
                 type="time"
                 value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
+                onChange={(e) => update({ startTime: e.target.value })}
                 className="w-full border-0 bg-transparent text-sm font-medium text-zinc-900 outline-none"
               />
             </div>
@@ -101,7 +104,7 @@ export default function SearchFiltersBar() {
               <input
                 type="time"
                 value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
+                onChange={(e) => update({ endTime: e.target.value })}
                 className="w-full border-0 bg-transparent text-sm font-medium text-zinc-900 outline-none"
               />
             </div>
@@ -111,14 +114,10 @@ export default function SearchFiltersBar() {
           <div className="flex justify-end md:pl-2">
             <button
               type="submit"
-              className="
-                h-[44px] min-w-[120px] rounded-xl bg-zinc-800
-                px-6 text-sm font-semibold text-white shadow-md
-                transition-all duration-150
-                hover:bg-zinc-900 hover:shadow-lg hover:scale-[1.02]
-              "
+              className="h-[44px] min-w-[120px] rounded-xl bg-zinc-800 px-6 text-sm font-semibold text-white shadow-md transition-all duration-150 hover:bg-zinc-900 hover:shadow-lg hover:scale-[1.02]"
+              disabled={loading}
             >
-              Search
+              {loading ? "Đang tìm..." : "Search"}
             </button>
           </div>
         </div>
@@ -128,18 +127,42 @@ export default function SearchFiltersBar() {
       <div className="mt-3 flex flex-col gap-2 text-xs text-zinc-500 md:flex-row md:items-center md:justify-between">
         <select
           value={area}
-          onChange={(e) => setArea(e.target.value)}
-          className="
-            w-full md:w-[15%]
-            rounded-lg border border-zinc-200 bg-white
-            px-3 py-2 text-xs text-zinc-800 shadow-sm
-            outline-none hover:border-zinc-300
-          "
+          onChange={(e) => {
+            const value = e.target.value;
+            if (onChangeAreaLive) {
+              //  cập nhật cả draft lẫn filters & gọi API
+              onChangeAreaLive(value);
+            } else {
+              // fallback nếu sau này dùng component ở chỗ khác
+              update({ area: value });
+            }
+          }}
+          className="w-full md:w-[15%] rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-800 shadow-sm outline-none hover:border-zinc-300"
         >
           <option value="">Khu vực</option>
-          <option value="quan2">Quận 2</option>
-          <option value="thuduc">Thủ Đức</option>
-          <option value="quan7">Quận 7</option>
+          {/* ... list quận huyện giữ nguyên ... */}
+          <option value="q1">Quận 1</option>
+          <option value="q3">Quận 3</option>
+          <option value="q4">Quận 4</option>
+          <option value="q5">Quận 5</option>
+          <option value="q6">Quận 6</option>
+          <option value="q7">Quận 7</option>
+          <option value="q8">Quận 8</option>
+          <option value="q10">Quận 10</option>
+          <option value="q11">Quận 11</option>
+          <option value="q12">Quận 12</option>
+          <option value="binhtan">Quận Bình Tân</option>
+          <option value="binhthanh">Quận Bình Thạnh</option>
+          <option value="govap">Quận Gò Vấp</option>
+          <option value="phunhuan">Quận Phú Nhuận</option>
+          <option value="tanbinh">Quận Tân Bình</option>
+          <option value="tanphu">Quận Tân Phú</option>
+          <option value="thuduc">TP Thủ Đức</option>
+          <option value="binhchanh">Huyện Bình Chánh</option>
+          <option value="cangio">Huyện Cần Giờ</option>
+          <option value="cuchi">Huyện Củ Chi</option>
+          <option value="hocmon">Huyện Hóc Môn</option>
+          <option value="nhabe">Huyện Nhà Bè</option>
         </select>
 
         <p className="text-[11px] md:text-xs">

@@ -3,10 +3,42 @@ const { Schema } = mongoose;
 
 const userSchema = new Schema(
   {
-    email:     { type: String, required: true, unique: true, lowercase: true },
-    fullName:  { type: String },
-    phone:     { type: String },
-    isActive:  { type: Boolean, default: true },
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true,
+    },
+    fullName: { type: String, trim: true },
+    phone: { type: String, trim: true },
+
+    isActive: { type: Boolean, default: true },
+
+    // Mật khẩu hash
+    passwordHash: {
+      type: String,
+      required: true,
+    },
+
+    // Xác thực email
+    emailVerified: {
+      type: Boolean,
+      default: false,
+    },
+    emailVerificationCode: {
+      type: String,
+      default: null,
+    },
+    emailVerificationExpiresAt: {
+      type: Date,
+      default: null,
+    },
+
+    lastLoginAt: {
+      type: Date,
+      default: null,
+    },
   },
   { timestamps: true }
 );

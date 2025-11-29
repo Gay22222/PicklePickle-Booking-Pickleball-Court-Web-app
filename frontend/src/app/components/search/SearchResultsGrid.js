@@ -1,37 +1,47 @@
 "use client";
 
-import { useState } from "react";
 import CourtCard from "../courts/CourtCard";
 import Pagination from "../layout/Pagination";
 
-const mockCourts = Array.from({ length: 21 }).map((_, index) => ({
-  id: index + 1,
-  name: "PickleLand",
-  rating: 4.2,
-  reviews: 36,
-  phone: "0943345543",
-  address: "188 Ađ Nguyễn Văn Hưởng, Thảo Điền, Thủ Đức, HCM",
-  timeRange: "6:00–22:00",
-  price: "120.000đ/giờ",
-  image: "/search/sample1.png",
-}));
+export default function SearchResultsGrid({
+  venues,
+  currentPage,
+  totalPages,
+  onPageChange,
+  loading,
+}) {
+  // Map venue -> court object cho CourtCard
+  const mappedCourts = (venues ?? []).map((v) => {
+    const primaryImage =
+      (v.images || []).find((img) => img.isPrimary) ||
+      (v.images || [])[0];
 
-const PER_PAGE = 8; // mỗi trang 8 sân
+    return {
+      id: v._id,
+      name: v.name,
+      rating: v.rating ?? 4.5,
+      reviews: v.reviewCount ?? 0,
+      phone: v.phone ?? "",
+      address: v.address,
+      timeRange: "06:00–23:00", // sau này lấy từ open-hours
+      price: v.basePricePerHour
+        ? `${v.basePricePerHour.toLocaleString("vi-VN")}đ/giờ`
+        : "",
+      image: primaryImage?.url || "/courts/sample1.png",
+    };
+  });
 
-export default function SearchResultsGrid() {
-  const [currentPage, setCurrentPage] = useState(1);
 
-  const totalPages = Math.ceil(mockCourts.length / PER_PAGE);
-  const startIndex = (currentPage - 1) * PER_PAGE;
-  const currentCourts = mockCourts.slice(startIndex, startIndex + PER_PAGE);
-
-  // chia 2 cột
-  const mid = Math.ceil(currentCourts.length / 2);
-  const leftColumn = currentCourts.slice(0, mid);
-  const rightColumn = currentCourts.slice(mid);
+  const mid = Math.ceil(mappedCourts.length / 2);
+  const leftColumn = mappedCourts.slice(0, mid);
+  const rightColumn = mappedCourts.slice(mid);
 
   return (
     <div>
+      {loading && (
+        <p className="mb-2 text-sm text-zinc-500">Đang tải danh sách sân...</p>
+      )}
+
       {/* GRID 2 CỘT */}
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-2xl border-2 border-dashed border-purple-200 p-3">
@@ -39,6 +49,11 @@ export default function SearchResultsGrid() {
             {leftColumn.map((court) => (
               <CourtCard key={court.id} court={court} />
             ))}
+            {!loading && leftColumn.length === 0 && rightColumn.length === 0 && (
+              <p className="text-xs text-zinc-500">
+                Không tìm thấy sân phù hợp.
+              </p>
+            )}
           </div>
         </div>
 
@@ -55,7 +70,7 @@ export default function SearchResultsGrid() {
       <Pagination
         currentPage={currentPage}
         totalPages={totalPages}
-        onPageChange={setCurrentPage}
+        onPageChange={onPageChange}
       />
     </div>
   );

@@ -1,28 +1,100 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { useParams, useSearchParams } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useParams } from "next/navigation";
+
 import PaymentMethodsSection from "@/app/components/payment/PaymentMethodsSection";
 import PaymentInvoiceSection from "@/app/components/payment/PaymentInvoiceSection";
 
+const PAYMENT_DRAFT_KEY = "pp_booking_payment_draft";
+
 export default function CourtPaymentPage() {
   const params = useParams();
-  const searchParams = useSearchParams();
-
   const courtId = params?.courtId;
 
-  // MOCK invoice
-  const invoiceItems = useMemo(
-    () => [
-      { id: "court", label: "Tiền sân:", amount: 200000 },
-      { id: "addon-racket", label: "Thuê vợt (x2):", amount: 100000 },
-      { id: "addon-tissue", label: "Khăn lạnh (x2):", amount: 6000 },
-      { id: "addon-balls", label: "Bóng Pickleball:", amount: 280000 },
-    ],
-    []
-  );
-
   const [selectedMethod, setSelectedMethod] = useState("momo");
+
+  // dữ liệu invoice thực tế
+  const [invoiceItems, setInvoiceItems] = useState([]);
+  const [paymentDraft, setPaymentDraft] = useState(null);
+
+  // đọc draft từ localStorage
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const raw = localStorage.getItem(PAYMENT_DRAFT_KEY);
+    if (!raw) return;
+
+    try {
+      const draft = JSON.parse(raw);
+      setPaymentDraft(draft);
+
+      const items = [];
+
+      // 1. Tiền sân (tổng)
+      if (draft.courtTotal && draft.courtTotal > 0) {
+        items.push({
+          id: "court",
+          label: "Tiền sân",
+          amount: draft.courtTotal,
+        });
+      }
+
+      // 2. Dịch vụ thêm
+      if (draft.addons?.items?.length) {
+        draft.addons.items.forEach((addon) => {
+          items.push({
+            id: `addon-${addon.id}`,
+            label: `${addon.name} (x${addon.quantity})`,
+            amount: addon.totalPrice,
+          });
+        });
+      }
+
+      setInvoiceItems(items);
+    } catch (err) {
+      console.error("Cannot parse payment draft", err);
+    }
+  }, []);
+
+  // mock xử lý thanh toán (sau này gọi API thật)
+  const handlePay = async () => {
+    if (!paymentDraft) {
+      alert("Không tìm thấy thông tin đặt sân. Vui lòng quay lại bước trước.");
+      return;
+    }
+
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_BASE}/payments/checkout`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            paymentMethod: selectedMethod,
+            bookingDraft: paymentDraft,
+          }),
+        }
+      );
+
+      if (!res.ok) {
+        console.error("Payment error", await res.text());
+        alert("Thanh toán thất bại (mock).");
+        return;
+      }
+
+      const json = await res.json();
+      console.log("Payment result:", json);
+
+      // mock: chỉ alert, sau này redirect sang Momo/VNPay
+      alert("Thanh toán (mock) thành công!");
+    } catch (err) {
+      console.error("Payment request error", err);
+      alert("Có lỗi trong quá trình thanh toán (mock).");
+    }
+  };
 
   return (
     <main className="min-h-screen bg-white">
@@ -39,7 +111,7 @@ export default function CourtPaymentPage() {
           />
 
           {/* RIGHT: invoice */}
-          <PaymentInvoiceSection items={invoiceItems} />
+          <PaymentInvoiceSection items={invoiceItems} onPay={handlePay} />
         </div>
       </section>
     </main>

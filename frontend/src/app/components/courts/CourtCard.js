@@ -1,7 +1,12 @@
+"use client";
+
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 
 export default function CourtCard({ court }) {
+  const router = useRouter();
   const {
+    id,
     name,
     rating,
     reviews,
@@ -11,6 +16,10 @@ export default function CourtCard({ court }) {
     price,
     image,
   } = court;
+  const handleViewDetail = () => {
+    if (!id) return;
+    router.push(`/courts/${id}`); 
+  };
 
   return (
     <article className="group flex gap-4 rounded-2xl border border-zinc-200 bg-zinc-100 p-4 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md">
@@ -107,9 +116,11 @@ export default function CourtCard({ court }) {
         <div className="mt-3 flex items-center gap-3">
           <button
             type="button"
+            onClick={handleViewDetail}
             className="rounded-md bg-zinc-300 px-4 py-1.5 text-xs font-semibold text-zinc-900 transition hover:bg-zinc-400"
           >
             Xem chi tiết
+            
           </button>
 
           <button

@@ -3,16 +3,21 @@ import "dotenv/config";        // để đọc file .env ở root
 import { buildApp } from "./app.js";
 import { connectMongo } from "./config/mongo.js";
 import { config } from "./config/env.js";
+import { ensureDefaults } from "./bootstrap/ensureDefaults.js";
+
 
 async function start() {
   try {
-    // 1. Kết nối Mongo
+    // Kết nối Mongo
     await connectMongo();
 
-    // 2. Khởi tạo Fastify app
+    // Seed / đảm bảo dữ liệu default (roles, statuses...)
+    await ensureDefaults();
+
+    //Khởi tạo Fastify app
     const app = buildApp();
 
-    // 3. Lắng nghe
+  
     await app.listen({
       port: config.port,
       host: "0.0.0.0",

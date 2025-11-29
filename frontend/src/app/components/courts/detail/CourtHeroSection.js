@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 
-export default function CourtHeroSection({ court }) {
+export default function CourtHeroSection({ court, venueId }) {
   const router = useRouter();
 
   const {
@@ -61,6 +61,12 @@ export default function CourtHeroSection({ court }) {
     );
   };
 
+  const handleBookNow = () => {
+    // Ưu tiên venueId từ URL, fallback sang court.id, cuối cùng là mock
+    const targetId = venueId || court?.id || "pickoland-thao-dien";
+    router.push(`/courts/${targetId}/booking`);
+  };
+
   return (
     <section className="grid items-start gap-8 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
       {/* LEFT */}
@@ -71,13 +77,9 @@ export default function CourtHeroSection({ court }) {
 
         {/* Buttons */}
         <div className="flex flex-wrap gap-3">
-           <button
+          <button
             type="button"
-            onClick={() => {
-              // dùng court.id nếu có, fallback courtId mock
-              const targetId = court?.id || "pickoland-thao-dien";
-              router.push(`/courts/${targetId}/booking`);
-            }}
+            onClick={handleBookNow}
             className="inline-flex items-center gap-2 rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-900 shadow-sm transition hover:bg-zinc-50"
           >
             <span>Đặt sân</span>

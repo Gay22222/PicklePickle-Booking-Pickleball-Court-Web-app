@@ -2,10 +2,13 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { config } from "./config/env.js";
+import { searchRoutes } from "./modules/search/search.routes.js";
+import { courtRoutes } from "./modules/courts/court.routes.js";
+import { bookingRoutes } from "./modules/bookings/booking.routes.js";
+import { authRoutes } from "./modules/auth/auth.routes.js";
+import addonRoutes from "./modules/addons/addon.routes.js";
 
-// sau này import các module routes ở đây
-// import { registerAuthRoutes } from "./modules/auth/auth.routes.js";
-// import { registerCourtRoutes } from "./modules/courts/court.routes.js";
+
 
 export function buildApp() {
   const app = Fastify({
@@ -26,11 +29,10 @@ export function buildApp() {
     };
   });
 
-  // TODO: register các module thực tế
-  // app.register(registerAuthRoutes, { prefix: "/api/auth" });
-  // app.register(registerCourtRoutes, { prefix: "/api/courts" });
-  // app.register(registerBookingRoutes, { prefix: "/api/bookings" });
-  // ...
-
+  app.register(searchRoutes, { prefix: config.apiPrefix });
+  app.register(courtRoutes, { prefix: config.apiPrefix });
+  app.register(bookingRoutes, { prefix: config.apiPrefix });
+  app.register(authRoutes, { prefix: config.apiPrefix });
+  app.register(addonRoutes, { prefix: config.apiPrefix });
   return app;
 }

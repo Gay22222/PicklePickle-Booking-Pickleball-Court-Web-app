@@ -1,5 +1,4 @@
 // src/config/env.js
-
 export const config = {
   // Server
   port: Number(process.env.PORT) || 4000,
@@ -14,4 +13,14 @@ export const config = {
 
   // CORS
   corsOrigin: process.env.CORS_ORIGIN || "http://localhost:3000",
+
+  // API
+  apiPrefix: process.env.API_PREFIX || "/api",
+
+  emailHost: process.env.EMAIL_HOST,
+  emailPort: Number(process.env.EMAIL_PORT || 587),
+  emailUser: process.env.EMAIL_USER,
+  emailPass: process.env.EMAIL_PASS,
+  emailFrom: process.env.EMAIL_FROM || process.env.EMAIL_USER,
 };
+
