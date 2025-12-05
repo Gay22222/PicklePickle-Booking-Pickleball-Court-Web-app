@@ -13,17 +13,19 @@ export default function CourtPaymentPage() {
   const courtId = params?.courtId;
 
   const [selectedMethod, setSelectedMethod] = useState("momo");
-
-  // dữ liệu invoice thực tế
   const [invoiceItems, setInvoiceItems] = useState([]);
   const [paymentDraft, setPaymentDraft] = useState(null);
+  const [loadingDraft, setLoadingDraft] = useState(true);
 
-  // đọc draft từ localStorage
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     const raw = localStorage.getItem(PAYMENT_DRAFT_KEY);
-    if (!raw) return;
+
+    if (!raw) {
+      setLoadingDraft(false);
+      return;
+    }
 
     try {
       const draft = JSON.parse(raw);
@@ -31,7 +33,6 @@ export default function CourtPaymentPage() {
 
       const items = [];
 
-      // 1. Tiền sân (tổng)
       if (draft.courtTotal && draft.courtTotal > 0) {
         items.push({
           id: "court",
@@ -40,7 +41,6 @@ export default function CourtPaymentPage() {
         });
       }
 
-      // 2. Dịch vụ thêm
       if (draft.addons?.items?.length) {
         draft.addons.items.forEach((addon) => {
           items.push({
@@ -54,13 +54,29 @@ export default function CourtPaymentPage() {
       setInvoiceItems(items);
     } catch (err) {
       console.error("Cannot parse payment draft", err);
+    } finally {
+      setLoadingDraft(false);
     }
   }, []);
 
-  // mock xử lý thanh toán (sau này gọi API thật)
+  const mapMethodForApi = (methodId) => {
+    if (!methodId) return null;
+    const m = String(methodId).toLowerCase();
+    if (m === "momo") return "MOMO";
+    if (m === "vnpay") return "VNPAY";
+    if (m === "zalopay") return "ZALOPAY";
+    return null;
+  };
+
   const handlePay = async () => {
-    if (!paymentDraft) {
-      alert("Không tìm thấy thông tin đặt sân. Vui lòng quay lại bước trước.");
+    if (!paymentDraft || !paymentDraft.bookingId) {
+      alert("Không tìm thấy bookingId. Vui lòng quay lại bước trước.");
+      return;
+    }
+
+    const paymentMethodForApi = mapMethodForApi(selectedMethod);
+    if (!paymentMethodForApi) {
+      alert("Phương thức thanh toán không hợp lệ.");
       return;
     }
 
@@ -73,26 +89,34 @@ export default function CourtPaymentPage() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            paymentMethod: selectedMethod,
-            bookingDraft: paymentDraft,
+            paymentMethod: paymentMethodForApi,
+            bookingId: paymentDraft.bookingId,
           }),
         }
       );
 
       if (!res.ok) {
         console.error("Payment error", await res.text());
-        alert("Thanh toán thất bại (mock).");
+        alert("Thanh toán thất bại. Vui lòng thử lại.");
         return;
       }
 
       const json = await res.json();
-      console.log("Payment result:", json);
+      const data = json?.data || json;
 
-      // mock: chỉ alert, sau này redirect sang Momo/VNPay
-      alert("Thanh toán (mock) thành công!");
+      console.log("Payment result:", data);
+
+      if (data && data.redirectUrl) {
+        window.location.href = data.redirectUrl;
+        return;
+      }
+
+      alert(
+        "Tạo yêu cầu thanh toán thành công nhưng chưa nhận được URL thanh toán. Vui lòng kiểm tra lại backend."
+      );
     } catch (err) {
       console.error("Payment request error", err);
-      alert("Có lỗi trong quá trình thanh toán (mock).");
+      alert("Có lỗi trong quá trình thanh toán. Vui lòng thử lại sau.");
     }
   };
 
@@ -103,16 +127,27 @@ export default function CourtPaymentPage() {
           Phương thức thanh toán
         </h1>
 
-        <div className="grid gap-10 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] items-start">
-          {/* LEFT: payment methods */}
-          <PaymentMethodsSection
-            selectedId={selectedMethod}
-            onChange={setSelectedMethod}
-          />
+        {loadingDraft && (
+          <p className="text-sm text-zinc-500">
+            Đang tải thông tin thanh toán...
+          </p>
+        )}
 
-          {/* RIGHT: invoice */}
-          <PaymentInvoiceSection items={invoiceItems} onPay={handlePay} />
-        </div>
+        {!loadingDraft && !paymentDraft && (
+          <p className="text-sm text-red-500">
+            Không tìm thấy thông tin đặt sân. Vui lòng quay lại bước trước.
+          </p>
+        )}
+
+        {!loadingDraft && paymentDraft && (
+          <div className="grid gap-10 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] items-start">
+            <PaymentMethodsSection
+              selectedId={selectedMethod}
+              onChange={setSelectedMethod}
+            />
+            <PaymentInvoiceSection items={invoiceItems} onPay={handlePay} />
+          </div>
+        )}
       </section>
     </main>
   );

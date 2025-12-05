@@ -155,25 +155,73 @@ export default function CourtBookingAddonsPage() {
     const handleGuestInfoChange = (next) => setGuestInfo(next);
 
     const handleContinue = () => {
-        // chuẩn bị dữ liệu cần cho hóa đơn
-        const draft = {
+        if (typeof window === "undefined") return;
+
+        const raw = localStorage.getItem(PAYMENT_DRAFT_KEY);
+        if (!raw) {
+            alert("Không tìm thấy thông tin booking. Vui lòng đặt sân lại.");
+            router.push(`/courts/${courtId}/booking`);
+            return;
+        }
+
+        let existingDraft;
+        try {
+            existingDraft = JSON.parse(raw);
+        } catch (err) {
+            console.error("Cannot parse payment draft", err);
+            alert("Thông tin đặt sân bị lỗi. Vui lòng đặt lại sân.");
+            localStorage.removeItem(PAYMENT_DRAFT_KEY);
+            router.push(`/courts/${courtId}/booking`);
+            return;
+        }
+
+        if (!existingDraft.bookingId) {
+            alert("Không tìm thấy bookingId. Vui lòng đặt lại sân.");
+            router.push(`/courts/${courtId}/booking`);
+            return;
+        }
+
+        // Gộp thông tin khách hàng cho bước payment/invoice
+        const customer =
+            isAuth && currentUser
+                ? {
+                    type: "user",
+                    name:
+                        currentUser.fullName ||
+                        currentUser.name ||
+                        currentUser.username ||
+                        currentUser.email ||
+                        "Khách hàng",
+                    email: currentUser.email || "",
+                    phone:
+                        currentUser.phone ||
+                        currentUser.phoneNumber ||
+                        currentUser.mobile ||
+                        "",
+                }
+                : {
+                    type: "guest",
+                    name: guestInfo.name,
+                    email: guestInfo.email,
+                    phone: guestInfo.phone,
+                };
+
+        const updatedDraft = {
+            ...existingDraft, // GIỮ bookingId, courtTotal cũ nếu có
             courtId,
             date: displayDate,
             courtName: venueName,
             courtAddress: venueAddress,
-            // chi tiết khung giờ + tiền sân
             courtPricingDetails: pricingDetails,
             courtTotal: totalCourtPrice,
-            // dịch vụ thêm (AddonsSection đã trả ra addonsSummary)
             addons: addonsSummary,
+            customer,
         };
 
-        if (typeof window !== "undefined") {
-            localStorage.setItem(PAYMENT_DRAFT_KEY, JSON.stringify(draft));
-        }
-
+        localStorage.setItem(PAYMENT_DRAFT_KEY, JSON.stringify(updatedDraft));
         router.push(`/courts/${courtId}/booking/payment`);
     };
+
 
 
     return (
@@ -303,3 +351,5 @@ function getPriceForHour(hour) {
     if (hour >= 16 && hour < 23) return 150000;
     return 120000;
 }
+
+

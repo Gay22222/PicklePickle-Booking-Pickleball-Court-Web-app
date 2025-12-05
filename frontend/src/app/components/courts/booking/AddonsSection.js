@@ -97,7 +97,9 @@ export default function AddonsSection({ onChange }) {
       } catch (err) {
         console.error("Could not load addons", err);
         if (!cancelled) {
-          setError("Không tải được danh sách dịch vụ thêm. Đang dùng dữ liệu mặc định.");
+          setError(
+            "Không tải được danh sách dịch vụ thêm. Đang dùng dữ liệu mặc định."
+          );
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -111,7 +113,7 @@ export default function AddonsSection({ onChange }) {
     };
   }, []);
 
-  // ===== Nếu parent muốn biết tổng tiền addons, gửi qua onChange =====
+  // ===== Tính tổng tiền & emit ra ngoài =====
   useEffect(() => {
     if (!onChange) return;
 
@@ -119,20 +121,26 @@ export default function AddonsSection({ onChange }) {
       .map(([productId, qty]) => {
         const product = products.find((p) => p.id === productId);
         if (!product) return null;
+
         const lineTotal = product.price * qty;
+
         return {
           id: product.id,
           name: product.name,
           price: product.price,
           quantity: qty,
-          lineTotal,
+          lineTotal,             // tên cũ
+          totalPrice: lineTotal, // alias để payment dùng
           category: product.category,
           categoryLabel: product.categoryLabel,
         };
       })
       .filter(Boolean);
 
-    const addonsTotal = items.reduce((sum, item) => sum + item.lineTotal, 0);
+    const addonsTotal = items.reduce(
+      (sum, item) => sum + item.totalPrice,
+      0
+    );
 
     onChange({ items, addonsTotal });
   }, [quantities, products, onChange]);
@@ -175,11 +183,11 @@ export default function AddonsSection({ onChange }) {
       </h2>
 
       {loading && (
-        <p className="text-xs text-zinc-500">Đang tải danh sách dịch vụ thêm...</p>
+        <p className="text-xs text-zinc-500">
+          Đang tải danh sách dịch vụ thêm...
+        </p>
       )}
-      {error && (
-        <p className="text-xs text-red-500">{error}</p>
-      )}
+      {error && <p className="text-xs text-red-500">{error}</p>}
 
       {/* Tabs */}
       <div className="flex flex-wrap gap-2 border-b border-zinc-200 pb-4">

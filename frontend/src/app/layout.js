@@ -1,8 +1,6 @@
-
 import { Geist, Geist_Mono, Baloo_2, Inter } from "next/font/google";
 import "./globals.css";
-import Header from "./components/layout/Header";
-import Footer from "./components/layout/Footer";
+import LayoutClient from "./components/layout/LayoutClient";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -37,18 +35,9 @@ export default function RootLayout({ children }) {
       suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} ${pickleFont.variable}`}
     >
-      
       <body className="bg-black text-white min-h-screen flex flex-col">
-      
-        <Header />
-
-        
-        <main className="flex-1">
-          {children}
-        </main>
-
-        
-        <Footer />
+        {/* LayoutClient sẽ quyết định có render Header public hay không */}
+        <LayoutClient>{children}</LayoutClient>
       </body>
     </html>
   );

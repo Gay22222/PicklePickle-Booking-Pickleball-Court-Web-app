@@ -12,6 +12,7 @@ const bookingSchema = new Schema(
     grossAmount: { type: Number },  // tổng trước giảm
     discount:    { type: Number },  // tổng giảm
     totalAmount: { type: Number },  // phải trả
+    paymentExpiresAt: { type: Date },
 
     note:      { type: String },
   },

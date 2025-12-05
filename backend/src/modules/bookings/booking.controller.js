@@ -3,16 +3,18 @@ import {
   createBookingFromSlots,
   getVenueAvailability,
   SlotConflictError,
+  getUserBookingHistory
 } from "./booking.service.js";
+
 
 // POST /api/bookings
 export async function createBookingHandler(request, reply) {
   try {
     const body = request.body || {};
 
-    
+
     const authUser = request.user || {};
-    const userId = authUser.id || authUser._id; 
+    const userId = authUser.id || authUser._id;
 
     if (!userId) {
       return reply
@@ -91,3 +93,41 @@ export async function getVenueAvailabilityHandler(request, reply) {
       .send({ message: "Không lấy được availability của venue" });
   }
 }
+// src/modules/bookings/booking.controller.js
+
+
+
+export async function getUserBookingHistoryHandler(request, reply) {
+  try {
+    const user = request.user; // đã được requireAuth gắn vào
+
+    // Hỗ trợ cả user.id (từ JWT) lẫn user._id (nếu sau này gắn trực tiếp từ DB)
+    const userId = user?.id || user?._id;
+
+    if (!userId) {
+      return reply.code(401).send({ message: "Unauthorized" });
+    }
+
+    const { page, limit, status } = request.query || {};
+    const statusCodes =
+      typeof status === "string" && status.length
+        ? status.split(",")
+        : undefined;
+
+    const result = await getUserBookingHistory({
+      userId,
+      page,
+      limit,
+      statusCodes,
+    });
+
+    return reply.send({ data: result });
+  } catch (err) {
+    request.log.error(err, "getUserBookingHistoryHandler error");
+    const statusCode = err.statusCode || 500;
+    return reply
+      .code(statusCode)
+      .send({ message: err.message || "Internal server error" });
+  }
+}
+

@@ -4,6 +4,10 @@ import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Image from "next/image";
 
+// ====== THÊM 2 CONST NÀY ======
+const TOKEN_STORAGE_KEY = "pp_token";
+const PAYMENT_DRAFT_KEY = "pp_booking_payment_draft";
+
 // Default list giờ 05:00 -> 22:00 (dùng khi chưa có data từ API)
 const DEFAULT_HOURS = Array.from({ length: 18 }, (_, idx) => {
   const hour = 5 + idx;
@@ -164,15 +168,15 @@ export default function CourtBookingTimePage() {
   // Mỗi row sân
   const courtsRows = hasAvailability
     ? availability.courts.map((c, index) => ({
-        label: `Sân ${index + 1}`, // giữ format cho addons: "Sân X"
-        courtName: c.courtName,
-        slots: c.slots || [],
-      }))
+      label: `Sân ${index + 1}`, // giữ format cho addons: "Sân X"
+      courtName: c.courtName,
+      slots: c.slots || [],
+    }))
     : Array.from({ length: 3 }, (_, idx) => ({
-        label: `Sân ${idx + 1}`,
-        courtName: `Sân ${idx + 1}`,
-        slots: [],
-      }));
+      label: `Sân ${idx + 1}`,
+      courtName: `Sân ${idx + 1}`,
+      slots: [],
+    }));
 
   // ===== Chọn / bỏ chọn slot =====
   const toggleSlot = (rowIndex, colIndex) => {
@@ -214,15 +218,134 @@ export default function CourtBookingTimePage() {
     0
   );
 
-  // ===== Chuyển qua bước addons =====
-  const handleSubmit = () => {
-    const slotsParam = selectedSlots.join(",");
-    router.push(
-      `/courts/${courtId}/booking/addons?date=${encodeURIComponent(
-        displayDate
-      )}&slots=${encodeURIComponent(slotsParam)}`
+  // ===== SUBMIT: tạo booking + lưu bookingId + sang addons =====
+  const handleSubmit = async () => {
+    if (selectedSlots.length === 0) return;
+
+    // 1. Lấy token
+    let token = null;
+    if (typeof window !== "undefined") {
+      token = localStorage.getItem(TOKEN_STORAGE_KEY);
+    }
+
+    console.log("pp_token in booking page =", token);
+
+    if (!token) {
+      alert("Vui lòng đăng nhập để đặt sân.");
+      router.push(`/auth/login?redirect=/courts/${courtId}/booking`);
+      return;
+    }
+
+    // 2. Build map từ key "Sân 1-10:00" -> { courtId, slotIndex }
+    if (!availability || !Array.isArray(availability.courts)) {
+      alert("Không có dữ liệu sân để tạo booking. Vui lòng tải lại trang.");
+      return;
+    }
+
+    const slotMap = new Map();
+
+    availability.courts.forEach((c, index) => {
+      const label = `Sân ${index + 1}`;
+      const slots = c.slots || [];
+      slots.forEach((slot) => {
+        const timeLabel = (slot.timeFrom || "").slice(0, 5); // "HH:MM"
+        const key = `${label}-${timeLabel}`;
+        slotMap.set(key, {
+          courtId: c.courtId,          // từ getVenueAvailability
+          slotIndex: slot.slotIndex,   // integer 5..22
+        });
+      });
+    });
+
+    // 3. Gom slotIndices theo courtId
+    const courtsById = new Map();
+
+    selectedSlots.forEach((key) => {
+      const info = slotMap.get(key);
+      if (!info) return;
+
+      const { courtId, slotIndex } = info;
+      if (!courtsById.has(courtId)) {
+        courtsById.set(courtId, []);
+      }
+      courtsById.get(courtId).push(slotIndex);
+    });
+
+    const courtsPayload = Array.from(courtsById.entries()).map(
+      ([cid, indices]) => ({
+        courtId: cid,
+        // loại trùng + sort tăng dần
+        slotIndices: Array.from(new Set(indices)).sort((a, b) => a - b),
+      })
     );
+
+    if (courtsPayload.length === 0) {
+      alert("Không tìm thấy slot hợp lệ để tạo booking.");
+      return;
+    }
+
+    console.log("courtsPayload gửi backend =", courtsPayload);
+
+    // 4. Gọi API /bookings
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_BASE}/bookings`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            venueId: courtId,      // param này thực ra là venueId
+            date: dateParam,       // "YYYY-MM-DD"
+            courts: courtsPayload, // chuẩn format backend
+          }),
+        }
+      );
+
+      const json = await res.json();
+      console.log("Create booking response", res.status, json);
+
+      if (!res.ok) {
+        alert(json?.message || "Không thể tạo booking. Vui lòng thử lại.");
+        return;
+      }
+
+      const bookingId =
+        json.data?.booking?._id ||
+        json.data?.bookingId ||
+        json.bookingId ||
+        json._id;
+
+      if (!bookingId) {
+        alert("Không lấy được mã booking. Vui lòng thử lại.");
+        return;
+      }
+
+      // 5. Lưu draft cho bước addons/payment
+      if (typeof window !== "undefined") {
+        const draft = {
+          bookingId,
+          courtTotal: totalPrice,   // số tiền sân FE tính để show invoice
+          addons: { items: [] },
+        };
+        localStorage.setItem(PAYMENT_DRAFT_KEY, JSON.stringify(draft));
+      }
+
+      // 6. Chuyển sang bước addons
+      const slotsParam = selectedSlots.join(",");
+      router.push(
+        `/courts/${courtId}/booking/addons?date=${encodeURIComponent(
+          displayDate
+        )}&slots=${encodeURIComponent(slotsParam)}`
+      );
+    } catch (err) {
+      console.error("Error creating booking", err);
+      alert("Có lỗi khi tạo booking. Vui lòng thử lại.");
+    }
   };
+
 
   const titleVenue = venueName || "PicklePickle";
 

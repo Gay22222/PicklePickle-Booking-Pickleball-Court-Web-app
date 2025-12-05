@@ -16,10 +16,10 @@ const PAYMENT_METHODS = [
     icon: "/payment/Logo-VNPAY-QR 1.svg",
   },
   {
-    id: "paypal",
-    name: "PayPal",
+    id: "zalopay",
+    name: "ZaloPay",
     description: "",
-    icon: "/payment/paypal 1.svg",
+    icon: "/payment/zalopay.png",
   },
 ];
 

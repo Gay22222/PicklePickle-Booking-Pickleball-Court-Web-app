@@ -1,4 +1,5 @@
 import Image from "next/image";
+import BookingStatusBadge from "./BookingStatusBadge";
 
 export default function BookingHistoryCard({ booking }) {
   const {
@@ -7,7 +8,8 @@ export default function BookingHistoryCard({ booking }) {
     date,
     startTime,
     endTime,
-    statusLabel,
+    status,        // <-- thêm
+    statusLabel,   // <-- đã có
     rating,
     reviews,
     imageUrl,
@@ -33,7 +35,6 @@ export default function BookingHistoryCard({ booking }) {
           {/* Tên sân + tim */}
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-1">
-
               <h3 className="text-[15px] font-semibold leading-snug text-black">
                 {courtName}
               </h3>
@@ -89,7 +90,8 @@ export default function BookingHistoryCard({ booking }) {
                 width={12}
                 height={12}
               />
-              <span>Trạng thái: {statusLabel}</span>
+              <span>Trạng thái:&nbsp;</span>
+              <BookingStatusBadge status={status} label={statusLabel} />
             </div>
           </div>
 
@@ -109,7 +111,6 @@ export default function BookingHistoryCard({ booking }) {
           {/* Rating + reviews */}
           <div className="flex flex-col items-end gap-1">
             <div className="flex items-center gap-2">
-
               <div className="flex items-center justify-center w-8 h-5 rounded-full bg-[#6b6b6b] text-[11px] text-white">
                 {rating.toFixed(1)}
               </div>
@@ -119,17 +120,13 @@ export default function BookingHistoryCard({ booking }) {
             </div>
           </div>
 
-
           <div className="flex items-center gap-2">
-            {/* Chi tiết: nền xám nhạt */}
             <button
               type="button"
               className="px-4 py-[6px] rounded-[30px] border border-[#c4c4c4] text-[11px] text-[#333] bg-[#f7f7f7] hover:bg-[#ebebeb] transition"
             >
               Chi tiết
             </button>
-
-            {/* Hủy sân: nền trắng */}
             <button
               type="button"
               className="px-4 py-[6px] rounded-[30px] border border-[#c4c4c4] text-[11px] text-[#333] bg-white hover:bg-[#f0f0f0] transition"

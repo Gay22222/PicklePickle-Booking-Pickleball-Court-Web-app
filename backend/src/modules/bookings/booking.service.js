@@ -8,6 +8,7 @@ import { Venue } from "../../models/venue.model.js";
 import { VenueOpenHour } from "../../models/venueOpenHour.model.js";
 import { VenueHoliday } from "../../models/venueHoliday.model.js";
 import { BlackoutSlot } from "../../models/blackoutSlot.model.js";
+import { Payment } from "../../models/payment.model.js";
 
 // ================== Helpers chung ==================
 
@@ -102,7 +103,7 @@ export async function createBookingFromSlots(payload) {
   }
 
   // Lấy status "PENDING_PAYMENT" (hoặc code bạn đã seed)
-  const pendingStatus = await BookingStatus.findOne({ code: "PENDING_PAYMENT" });
+  const pendingStatus = await BookingStatus.findOne({ code: "PENDING" });
   if (!pendingStatus) {
     throw new Error("BookingStatus with code PENDING_PAYMENT not found");
   }
@@ -351,5 +352,166 @@ export async function getVenueAvailability({ venueId, dateStr }) {
     isHoliday: false,
     holidayReason: null,
     courts: courtsWithSlots,
+  };
+}
+/**
+ * Lấy lịch sử đặt sân của 1 user
+ * options: { userId, page, limit, statusCodes }
+ */
+export async function getUserBookingHistory({
+  userId,
+  page = 1,
+  limit = 5,
+  statusCodes,
+}) {
+  const query = { user: userId };
+
+  // Nếu FE gửi filter theo status code (PENDING, PAID, CANCELLED...)
+  if (Array.isArray(statusCodes) && statusCodes.length > 0) {
+    const statusDocs = await BookingStatus.find({
+      code: { $in: statusCodes },
+    })
+      .select("_id")
+      .lean();
+
+    if (statusDocs.length > 0) {
+      query.status = { $in: statusDocs.map((s) => s._id) };
+    }
+  }
+
+  const pageNumber = Number(page) > 0 ? Number(page) : 1;
+  const pageSize = Number(limit) > 0 ? Number(limit) : 5;
+
+  const [total, bookings] = await Promise.all([
+    Booking.countDocuments(query),
+    Booking.find(query)
+      .populate("venue", "name address")
+      .populate("status", "code label isFinal isCancel")
+      .sort({ createdAt: -1 })
+      .skip((pageNumber - 1) * pageSize)
+      .limit(pageSize)
+      .lean(),
+  ]);
+
+  if (bookings.length === 0) {
+    return {
+      page: pageNumber,
+      limit: pageSize,
+      total,
+      items: [],
+    };
+  }
+
+  const bookingIds = bookings.map((b) => b._id);
+
+  // Lấy các slot + sân + payment cho các booking này
+  const [bookingItems, payments] = await Promise.all([
+    BookingItem.find({ booking: { $in: bookingIds } })
+      .populate("court", "name")
+      .lean(),
+    Payment.find({ booking: { $in: bookingIds } })
+      .populate("status", "code label isSuccess")
+      .lean(),
+  ]);
+
+  const itemsByBooking = new Map();
+  for (const item of bookingItems) {
+    const key = item.booking.toString();
+    if (!itemsByBooking.has(key)) itemsByBooking.set(key, []);
+    itemsByBooking.get(key).push(item);
+  }
+
+  const paymentsByBooking = new Map();
+  for (const p of payments) {
+    const key = p.booking.toString();
+    if (!paymentsByBooking.has(key)) paymentsByBooking.set(key, []);
+    paymentsByBooking.get(key).push(p);
+  }
+
+  function slotIndexToTime(slotIndex) {
+    // Giả sử slotIndex 0 = 05:00, mỗi slot = 60 phút.
+    // Nếu backend của bạn quy ước khác, chỉnh lại cho khớp.
+    const baseHour = 5;
+    const hour = baseHour + Number(slotIndex || 0);
+    const hh = String(hour).padStart(2, "0");
+    return `${hh}:00`;
+  }
+
+  const items = bookings.map((b) => {
+    const bookingId = b._id.toString();
+    const bi = itemsByBooking.get(bookingId) || [];
+    // Lấy slot đầu tiên làm đại diện (nếu có nhiều sân / nhiều khung thì tuỳ bạn mở rộng thêm)
+    const firstItem = bi[0] || null;
+
+    let date = null;
+    let slotStart = null;
+    let slotEnd = null;
+    let courtName = null;
+
+    if (firstItem) {
+      date = firstItem.date;
+      slotStart = firstItem.slotStart;
+      slotEnd = firstItem.slotEnd;
+      courtName = firstItem.court?.name || null;
+    }
+
+    const paymentList = paymentsByBooking.get(bookingId) || [];
+    const successPayment = paymentList.find((p) => p.status?.isSuccess);
+    const primaryPayment = successPayment || paymentList[0];
+
+    const paymentStatusLabel =
+      primaryPayment?.status?.label || "Chưa thanh toán";
+    const paymentStatusCode = primaryPayment?.status?.code || "UNPAID";
+    const paymentMethod = primaryPayment?.provider || null;
+
+    // Format sẵn 2 chuỗi date/time đơn giản, FE có thể dùng luôn
+    let dateLabel = "";
+    let timeLabel = "";
+
+    if (date instanceof Date) {
+      // YYYY-MM-DD -> dd/MM/yyyy
+      const d = date;
+      const dd = String(d.getDate()).padStart(2, "0");
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      const yyyy = d.getFullYear();
+      dateLabel = `${dd}/${mm}/${yyyy}`;
+    }
+
+    if (slotStart != null && slotEnd != null) {
+      const from = slotIndexToTime(slotStart);
+      const to = slotIndexToTime(slotEnd + 1); // giả sử end là inclusive
+      timeLabel = `${from} - ${to}`;
+    }
+
+    return {
+      id: bookingId,
+      code: b.code,
+      venueName: b.venue?.name || "",
+      venueAddress: b.venue?.address || "",
+      courtName: courtName || "Sân chưa rõ",
+
+      date: date, // Date object
+      dateLabel,
+      timeLabel,
+
+      bookingStatusCode: b.status?.code || "",
+      bookingStatusLabel: b.status?.label || "",
+      bookingIsFinal: !!b.status?.isFinal,
+      bookingIsCancel: !!b.status?.isCancel,
+
+      paymentStatusCode,
+      paymentStatusLabel,
+      paymentMethod,
+
+      totalAmount: b.totalAmount || 0,
+      createdAt: b.createdAt,
+    };
+  });
+
+  return {
+    page: pageNumber,
+    limit: pageSize,
+    total,
+    items,
   };
 }

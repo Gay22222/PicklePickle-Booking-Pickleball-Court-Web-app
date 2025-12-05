@@ -3,12 +3,17 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 
 export default function Header() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userName, setUserName] = useState("");
   const router = useRouter();
+  const pathname = usePathname();
+
+  // Xác định có phải route backoffice không
+  const isBackoffice =
+    pathname.startsWith("/owner") || pathname.startsWith("/admin");
 
   const syncFromStorage = () => {
     if (typeof window === "undefined") return;
@@ -39,7 +44,6 @@ export default function Header() {
   }, []);
 
   const handleLogout = (e) => {
-    // tránh click logout cũng trigger vào avatar
     e.stopPropagation();
     if (typeof window !== "undefined") {
       localStorage.removeItem("pp_token");
@@ -49,6 +53,102 @@ export default function Header() {
     router.push("/login");
   };
 
+  // =========================
+  //  HEADER BACKOFFICE
+  // =========================
+  if (isBackoffice) {
+    // Label hiển thị bên phải: ADMIN hay CHỦ SÂN
+    const roleLabel = pathname.startsWith("/admin") ? "ADMIN" : "CHỦ SÂN";
+    const displayInitial =
+      (userName && userName[0]?.toUpperCase()) || roleLabel[0];
+
+    return (
+      <header className="bg-[#032341] text-white h-12 flex items-center shadow-sm">
+        <nav className="w-full max-w-6xl mx-auto px-4 flex items-center justify-between">
+          {/* Logo + brand */}
+          <button
+            type="button"
+            onClick={() => router.push("/")}
+            className="flex items-center gap-2"
+          >
+            <Image
+              src="/Logo.svg"
+              alt="PicklePickle logo"
+              width={24}
+              height={24}
+              priority
+            />
+            <span className="text-sm font-semibold tracking-wide">
+              PicklePickle
+            </span>
+          </button>
+
+          {/* Icons + role */}
+          <div className="flex items-center gap-4">
+            {/* Search */}
+            <button
+              type="button"
+              className="p-1.5 rounded-full hover:bg-[#04152c] transition-colors"
+            >
+              <Image
+                src="/Search.svg"
+                alt="Tìm kiếm"
+                width={18}
+                height={18}
+              />
+            </button>
+
+            {/* Help */}
+            <button
+              type="button"
+              className="p-1.5 rounded-full hover:bg-[#04152c] transition-colors"
+            >
+              <Image
+                src="/QuestionCircle.svg"
+                alt="Trợ giúp"
+                width={18}
+                height={18}
+              />
+            </button>
+
+            {/* Bell + badge */}
+            {/* Bell + badge */}
+            <button
+              type="button"
+              className="relative p-1.5 rounded-full hover:bg-[#04152c] transition-colors"
+            >
+              <Image
+                src="/Bell.svg"
+                alt="Thông báo"
+                width={18}
+                height={18}
+              />
+
+              
+
+            </button>
+
+
+
+
+            {/* Avatar + role label (ADMIN / CHỦ SÂN) */}
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-full bg-sky-500 flex items-center justify-center text-xs font-semibold">
+                {displayInitial}
+              </div>
+              <span className="text-xs font-semibold uppercase">
+                {roleLabel}
+              </span>
+            </div>
+          </div>
+        </nav>
+      </header>
+    );
+  }
+
+  // =========================
+  //  HEADER USER (PUBLIC) – GIỮ NGUYÊN
+  // ========================= :contentReference[oaicite:0]{index=0}
   return (
     <header className="pp-header">
       <nav className="pp-header__inner">
@@ -93,7 +193,6 @@ export default function Header() {
                 <span>Lịch sử</span>
               </button>
 
-              {/* CLICK AVATAR → PROFILE */}
               <div
                 className="pp-header__user cursor-pointer"
                 onClick={() => router.push("/account/profile")}

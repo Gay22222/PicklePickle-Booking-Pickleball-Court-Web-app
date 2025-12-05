@@ -7,6 +7,9 @@ import { courtRoutes } from "./modules/courts/court.routes.js";
 import { bookingRoutes } from "./modules/bookings/booking.routes.js";
 import { authRoutes } from "./modules/auth/auth.routes.js";
 import addonRoutes from "./modules/addons/addon.routes.js";
+import paymentRoutes from "./modules/payments/payment.routes.js";
+import { startBookingExpirationJob } from "./jobs/bookingExpiration.job.js";
+import { dashboardRoutes } from "./modules/dashboard/dashboard.routes.js";
 
 
 
@@ -34,5 +37,9 @@ export function buildApp() {
   app.register(bookingRoutes, { prefix: config.apiPrefix });
   app.register(authRoutes, { prefix: config.apiPrefix });
   app.register(addonRoutes, { prefix: config.apiPrefix });
+  app.register(paymentRoutes, { prefix: config.apiPrefix });
+  app.register(dashboardRoutes, { prefix: config.apiPrefix });
+
+  startBookingExpirationJob();
   return app;
 }
