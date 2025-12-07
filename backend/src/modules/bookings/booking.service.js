@@ -10,7 +10,7 @@ import { VenueHoliday } from "../../models/venueHoliday.model.js";
 import { BlackoutSlot } from "../../models/blackoutSlot.model.js";
 import { Payment } from "../../models/payment.model.js";
 
-// ================== Helpers chung ==================
+// ================== Helpers ==================
 
 function generateBookingCode() {
   const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, "");
@@ -41,13 +41,11 @@ function groupContinuousSlots(slotIndices) {
   return segments;
 }
 
-// Đổi "HH:mm" -> số phút
 function timeStrToMinutes(str) {
   const [h, m] = str.split(":").map(Number);
   return h * 60 + m;
 }
 
-// Đổi phút -> "HH:mm"
 function minutesToTimeStr(total) {
   const h = Math.floor(total / 60);
   const m = total % 60;
@@ -73,8 +71,7 @@ export class SlotConflictError extends Error {
   }
 }
 
-// ================== Service: tạo booking + giữ slot ==================
-
+// ================== Service: tạo booking ==================
 
 export async function createBookingFromSlots(payload) {
   const { userId, venueId, date, courts, discount = 0, note } = payload;
@@ -102,10 +99,10 @@ export async function createBookingFromSlots(payload) {
     throw new Error("Some courts do not belong to the venue");
   }
 
-  // Lấy status "PENDING_PAYMENT" (hoặc code bạn đã seed)
+  // Lấy status PENDING
   const pendingStatus = await BookingStatus.findOne({ code: "PENDING" });
   if (!pendingStatus) {
-    throw new Error("BookingStatus with code PENDING_PAYMENT not found");
+    throw new Error("BookingStatus with code PENDING not found");
   }
 
   const bookingCode = generateBookingCode();
@@ -142,7 +139,6 @@ export async function createBookingFromSlots(payload) {
     await BookingSlot.insertMany(bookingSlotsDocs, { ordered: true });
   } catch (err) {
     if (err && err.code === 11000) {
-      // Tìm ra các slot đã tồn tại (bị trùng)
       const conflictConditions = bookingSlotsDocs.map((doc) => ({
         court: doc.court,
         date: doc.date,
@@ -153,7 +149,6 @@ export async function createBookingFromSlots(payload) {
         $or: conflictConditions,
       }).lean();
 
-      // Dọn rác
       await BookingSlot.deleteMany({ booking: booking._id });
       await Booking.deleteOne({ _id: booking._id });
 
@@ -168,7 +163,6 @@ export async function createBookingFromSlots(payload) {
       );
     }
 
-    // Lỗi khác: dọn rác
     await BookingSlot.deleteMany({ booking: booking._id });
     await Booking.deleteOne({ _id: booking._id });
     throw err;
@@ -211,7 +205,7 @@ export async function createBookingFromSlots(payload) {
     await BookingItem.insertMany(bookingItemsDocs);
   }
 
-  // 4) Update lại tiền trên Booking
+  // 4) Update tiền trên Booking
   const finalGross = grossAmount;
   const finalDiscount = discount || 0;
   const finalTotal = finalGross - finalDiscount;
@@ -231,12 +225,8 @@ export async function createBookingFromSlots(payload) {
   };
 }
 
-// ================== Service: availability theo venue ==================
+// ================== Service: availability venue ==================
 
-/**
- * Lấy availability cho toàn bộ court trong 1 venue theo ngày
- * - slotIndex ở đây = giờ (05–22) để match với FE hiện tại
- */
 export async function getVenueAvailability({ venueId, dateStr }) {
   const date = new Date(`${dateStr}T00:00:00.000Z`);
   if (Number.isNaN(date.getTime())) {
@@ -258,10 +248,7 @@ export async function getVenueAvailability({ venueId, dateStr }) {
 
   const weekday = date.getDay(); // 0 (CN) - 6 (T7)
 
-  // Check holiday
   const holiday = await VenueHoliday.findOne({ venue: venueId, date });
-
-  // Lấy giờ mở cửa
   const openHour = await VenueOpenHour.findOne({ venue: venueId, weekday });
 
   if (!openHour || holiday) {
@@ -281,13 +268,11 @@ export async function getVenueAvailability({ venueId, dateStr }) {
     };
   }
 
-  // slotIndex = giờ
   const firstSlotIndex = parseInt(openHour.timeFrom.slice(0, 2), 10);
   const lastSlotIndex = parseInt(openHour.timeTo.slice(0, 2), 10) - 1;
 
   const courtIds = courts.map((c) => c._id);
 
-  // booking slot đã được giữ / đặt
   const bookingSlots = await BookingSlot.find({
     court: { $in: courtIds },
     date,
@@ -295,12 +280,9 @@ export async function getVenueAvailability({ venueId, dateStr }) {
   }).lean();
 
   const bookedSet = new Set(
-    bookingSlots.map(
-      (s) => `${s.court.toString()}#${s.slotIndex}`
-    )
+    bookingSlots.map((s) => `${s.court.toString()}#${s.slotIndex}`)
   );
 
-  // blackout
   const blackouts = await BlackoutSlot.find({
     court: { $in: courtIds },
     date,
@@ -318,7 +300,7 @@ export async function getVenueAvailability({ venueId, dateStr }) {
   const courtsWithSlots = courts.map((c) => {
     const slots = [];
     for (let idx = firstSlotIndex; idx <= lastSlotIndex; idx += 1) {
-      const startMin = idx * 60; // vì 1 slot = 1h, đơn giản hoá
+      const startMin = idx * 60;
       const endMin = startMin + slotMinutes;
 
       let status = "available";
@@ -354,10 +336,9 @@ export async function getVenueAvailability({ venueId, dateStr }) {
     courts: courtsWithSlots,
   };
 }
-/**
- * Lấy lịch sử đặt sân của 1 user
- * options: { userId, page, limit, statusCodes }
- */
+
+// ================== Service: lịch sử user ==================
+
 export async function getUserBookingHistory({
   userId,
   page = 1,
@@ -366,7 +347,6 @@ export async function getUserBookingHistory({
 }) {
   const query = { user: userId };
 
-  // Nếu FE gửi filter theo status code (PENDING, PAID, CANCELLED...)
   if (Array.isArray(statusCodes) && statusCodes.length > 0) {
     const statusDocs = await BookingStatus.find({
       code: { $in: statusCodes },
@@ -404,7 +384,6 @@ export async function getUserBookingHistory({
 
   const bookingIds = bookings.map((b) => b._id);
 
-  // Lấy các slot + sân + payment cho các booking này
   const [bookingItems, payments] = await Promise.all([
     BookingItem.find({ booking: { $in: bookingIds } })
       .populate("court", "name")
@@ -429,8 +408,6 @@ export async function getUserBookingHistory({
   }
 
   function slotIndexToTime(slotIndex) {
-    // Giả sử slotIndex 0 = 05:00, mỗi slot = 60 phút.
-    // Nếu backend của bạn quy ước khác, chỉnh lại cho khớp.
     const baseHour = 5;
     const hour = baseHour + Number(slotIndex || 0);
     const hh = String(hour).padStart(2, "0");
@@ -440,7 +417,6 @@ export async function getUserBookingHistory({
   const items = bookings.map((b) => {
     const bookingId = b._id.toString();
     const bi = itemsByBooking.get(bookingId) || [];
-    // Lấy slot đầu tiên làm đại diện (nếu có nhiều sân / nhiều khung thì tuỳ bạn mở rộng thêm)
     const firstItem = bi[0] || null;
 
     let date = null;
@@ -464,12 +440,10 @@ export async function getUserBookingHistory({
     const paymentStatusCode = primaryPayment?.status?.code || "UNPAID";
     const paymentMethod = primaryPayment?.provider || null;
 
-    // Format sẵn 2 chuỗi date/time đơn giản, FE có thể dùng luôn
     let dateLabel = "";
     let timeLabel = "";
 
     if (date instanceof Date) {
-      // YYYY-MM-DD -> dd/MM/yyyy
       const d = date;
       const dd = String(d.getDate()).padStart(2, "0");
       const mm = String(d.getMonth() + 1).padStart(2, "0");
@@ -479,7 +453,7 @@ export async function getUserBookingHistory({
 
     if (slotStart != null && slotEnd != null) {
       const from = slotIndexToTime(slotStart);
-      const to = slotIndexToTime(slotEnd + 1); // giả sử end là inclusive
+      const to = slotIndexToTime(slotEnd + 1);
       timeLabel = `${from} - ${to}`;
     }
 
@@ -490,7 +464,7 @@ export async function getUserBookingHistory({
       venueAddress: b.venue?.address || "",
       courtName: courtName || "Sân chưa rõ",
 
-      date: date, // Date object
+      date,
       dateLabel,
       timeLabel,
 
@@ -513,5 +487,138 @@ export async function getUserBookingHistory({
     limit: pageSize,
     total,
     items,
+  };
+}
+
+// ================== Service: owner daily overview ==================
+
+export async function getOwnerDailyOverview({ ownerId, dateStr, venueId }) {
+  if (!ownerId) {
+    const err = new Error("ownerId is required");
+    err.statusCode = 401;
+    throw err;
+  }
+
+  if (!dateStr) {
+    const err = new Error("Query param 'date' (YYYY-MM-DD) is required");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const bookingDate = new Date(`${dateStr}T00:00:00.000Z`);
+  if (Number.isNaN(bookingDate.getTime())) {
+    const err = new Error("Invalid date format, expected YYYY-MM-DD");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  let venue;
+  if (venueId) {
+    venue = await Venue.findOne({
+      _id: venueId,
+      manager: ownerId,
+      isActive: true,
+    }).lean();
+  } else {
+    venue = await Venue.findOne({
+      manager: ownerId,
+      isActive: true,
+    })
+      .sort({ createdAt: 1 })
+      .lean();
+  }
+
+  if (!venue) {
+    return {
+      venue: null,
+      date: dateStr,
+      availability: null,
+      bookings: [],
+    };
+  }
+
+  const availability = await getVenueAvailability({
+    venueId: venue._id,
+    dateStr,
+  });
+
+  const courtIds = (availability.courts || []).map((c) => c.courtId);
+  if (!courtIds.length) {
+    return {
+      venue: {
+        id: venue._id.toString(),
+        name: venue.name,
+        address: venue.address,
+      },
+      date: dateStr,
+      availability,
+      bookings: [],
+    };
+  }
+
+  const bookingItems = await BookingItem.find({
+    court: { $in: courtIds },
+    date: bookingDate,
+  })
+    .populate({
+      path: "booking",
+      populate: [
+        { path: "status", select: "code label isFinal isCancel" },
+        { path: "user", select: "fullName name phoneNumber phone" },
+      ],
+    })
+    .populate("court", "name")
+    .lean();
+
+  function slotIndexToTime(idx) {
+    const hh = String(idx).padStart(2, "0");
+    return `${hh}:00`;
+  }
+
+  const rows = bookingItems.map((item) => {
+    const booking = item.booking || {};
+    const user = booking.user || {};
+    const statusDoc = booking.status || {};
+    const court = item.court || {};
+
+    const slotStart = item.slotStart;
+    const slotEnd = item.slotEnd;
+
+    const startTime = slotIndexToTime(slotStart);
+    const endTime = slotIndexToTime(slotEnd + 1);
+
+    let normalizedStatus = "active";
+    if (statusDoc.isCancel) normalizedStatus = "cancelled";
+    else if (statusDoc.isFinal) normalizedStatus = "completed";
+    else if (statusDoc.code === "PENDING") normalizedStatus = "pending";
+
+    return {
+      id: item._id.toString(),
+      code: booking.code,
+      courtId: court._id?.toString(),
+      courtName: court.name || "Sân",
+      customerName: user.fullName || user.name || "Khách",
+      phone: user.phoneNumber || user.phone || "",
+      startTime,
+      endTime,
+      slotStartIndex: slotStart,
+      slotEndIndex: slotEnd,
+      slotsCount: 1,
+      statusCode: statusDoc.code,
+      statusLabel: statusDoc.label,
+      status: normalizedStatus,
+      bookedAt: dateStr,
+    };
+  });
+
+  return {
+    venue: {
+      id: venue._id.toString(),
+      name: venue.name,
+      address: venue.address,
+    },
+    date: dateStr,
+    availability,
+    bookings: rows,
   };
 }

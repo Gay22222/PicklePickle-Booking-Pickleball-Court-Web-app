@@ -552,7 +552,7 @@ export async function handleMomoIpn(body) {
   }
 
   const success = resultCode === 0 || resultCode === "0";
-  const statusCode = success ? "SUCCESS" : "FAILED";
+  const statusCode = success ? "SUCCEEDED" : "FAILED";
   const statusId = await getPaymentStatusId(statusCode);
 
   payment.status = statusId;
@@ -619,7 +619,7 @@ export async function handleVnpayIpn(query) {
   }
 
   const success = rspCode === "00";
-  const statusCode = success ? "SUCCESS" : "FAILED";
+  const statusCode = success ? "SUCCEEDED" : "FAILED";
   const statusId = await getPaymentStatusId(statusCode);
 
   payment.status = statusId;

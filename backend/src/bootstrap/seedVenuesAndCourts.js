@@ -48,11 +48,25 @@ const COMMON_AMENITY_IMAGES = Array(5).fill("/courts/mockupduplicate.png");
  *  - PicklePickle Thủ Đức
  *  - PicklePickle Quận 1
  *  - PicklePickle Quận 7
+ *
+ * ownerUser: user default có role OWNER để gán vào field manager.
  */
-export async function ensureVenuesAndCourts() {
+export async function ensureVenuesAndCourts(ownerUser) {
   const existingVenueCount = await Venue.countDocuments();
+
   if (existingVenueCount > 0) {
-    console.log(" Venues already exist, skip seeding venues & related data");
+    // Nếu đã có venue rồi nhưng chưa có manager thì patch cho gọn
+    if (ownerUser) {
+      await Venue.updateMany(
+        { manager: { $exists: false } },
+        { $set: { manager: ownerUser._id, isActive: true } }
+      );
+      console.log(
+        " Existing venues updated: set manager to default owner and isActive=true"
+      );
+    } else {
+      console.log(" Venues already exist, skip seeding venues & related data");
+    }
     return;
   }
 
@@ -80,7 +94,7 @@ export async function ensureVenuesAndCourts() {
       district: "Quận 1",
       address: "45 Lê Lợi, Quận 1, TP.HCM",
       latitude: 10.775,
-      longitude: 106.700,
+      longitude: 106.7,
       heroTagline: "Cụm 3 sân Pickleball ngay trung tâm Quận 1",
       phone: "0909 234 567",
       basePricePerHour: 90000,
@@ -119,6 +133,10 @@ export async function ensureVenuesAndCourts() {
       longitude: v.longitude,
       timeZone: "Asia/Ho_Chi_Minh",
       slotMinutes: 60,
+      isActive: true,
+
+      // GÁN CHỦ SÂN MẶC ĐỊNH
+      manager: ownerUser ? ownerUser._id : undefined,
 
       phone: v.phone,
       heroTagline: v.heroTagline,
@@ -164,7 +182,7 @@ export async function ensureVenuesAndCourts() {
       });
     }
 
-    // 4. Price rules (bảng giá giống mock CourtPricingSection)
+    // 4. Price rules
     const base = v.basePricePerHour;
 
     await PriceRule.insertMany([
@@ -217,18 +235,18 @@ export async function ensureVenuesAndCourts() {
       reason: "Nghỉ lễ Tết Dương lịch (mock)",
     });
 
-    // 6. Blackout slot demo (khóa 1 slot buổi sáng cho sân đầu tiên)
+    // 6. Blackout slot demo
     const firstCourt = courtDocs[0];
     await BlackoutSlot.create({
       venue: venue._id,
       court: firstCourt._id,
       date: new Date("2025-01-05T00:00:00.000Z"),
-      slotStart: 8, // index slot, backend sau này tự quy ước
+      slotStart: 8,
       slotEnd: 9,
       reason: "Bảo trì mặt sân (mock)",
     });
 
-    // 7. Split rule (demo 90% chủ sân / 10% nền tảng)
+    // 7. Split rule
     await SplitRule.create({
       venue: venue._id,
       provider: "DEFAULT",

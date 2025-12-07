@@ -83,7 +83,7 @@ export default function BookingHistoryPage() {
         setLoading(true);
         setAuthError("");
 
-        // 🔑 LẤY TOKEN GIỐNG TRANG BOOKING
+        //  LẤY TOKEN GIỐNG TRANG BOOKING
         // ưu tiên pptoken (như bạn nói), fallback sang pp_token
         const token =
           typeof window !== "undefined"

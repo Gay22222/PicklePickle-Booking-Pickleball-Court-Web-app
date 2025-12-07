@@ -3,16 +3,15 @@ import {
   createBookingFromSlots,
   getVenueAvailability,
   SlotConflictError,
-  getUserBookingHistory
+  getUserBookingHistory,
+  getOwnerDailyOverview,
 } from "./booking.service.js";
-
+import { Venue } from "../../models/venue.model.js";
 
 // POST /api/bookings
 export async function createBookingHandler(request, reply) {
   try {
     const body = request.body || {};
-
-
     const authUser = request.user || {};
     const userId = authUser.id || authUser._id;
 
@@ -93,15 +92,11 @@ export async function getVenueAvailabilityHandler(request, reply) {
       .send({ message: "Không lấy được availability của venue" });
   }
 }
-// src/modules/bookings/booking.controller.js
 
-
-
+// GET /api/bookings/history
 export async function getUserBookingHistoryHandler(request, reply) {
   try {
-    const user = request.user; // đã được requireAuth gắn vào
-
-    // Hỗ trợ cả user.id (từ JWT) lẫn user._id (nếu sau này gắn trực tiếp từ DB)
+    const user = request.user;
     const userId = user?.id || user?._id;
 
     if (!userId) {
@@ -131,3 +126,70 @@ export async function getUserBookingHistoryHandler(request, reply) {
   }
 }
 
+// GET /api/owner/bookings/daily?date=YYYY-MM-DD&venueId=...
+export async function getOwnerDailyOverviewHandler(request, reply) {
+  try {
+    const user = request.user;
+    const ownerId = user?.id || user?._id;
+
+    if (!ownerId) {
+      return reply.code(401).send({ message: "Unauthorized" });
+    }
+
+    const { date, venueId } = request.query || {};
+
+    if (!date) {
+      return reply
+        .code(400)
+        .send({ message: "Query param 'date' (YYYY-MM-DD) is required" });
+    }
+
+    const data = await getOwnerDailyOverview({
+      ownerId,
+      dateStr: date,
+      venueId,
+    });
+
+    return reply.send({ data });
+  } catch (err) {
+    request.log.error(err, "getOwnerDailyOverviewHandler error");
+    const statusCode = err.statusCode || 500;
+    return reply
+      .code(statusCode)
+      .send({ message: err.message || "Internal server error" });
+  }
+}
+
+// GET /api/owner/venues
+export async function getOwnerVenuesHandler(request, reply) {
+  try {
+    const user = request.user;
+    const ownerId = user?.id || user?._id;
+
+    if (!ownerId) {
+      return reply.code(401).send({ message: "Unauthorized" });
+    }
+
+    const venues = await Venue.find({
+      manager: ownerId,
+      isActive: true,
+    })
+      .select("_id name address")
+      .sort({ createdAt: 1 })
+      .lean();
+
+    const data = venues.map((v) => ({
+      id: v._id.toString(),
+      name: v.name,
+      address: v.address || "",
+    }));
+
+    return reply.send({ data });
+  } catch (err) {
+    request.log.error(err, "getOwnerVenuesHandler error");
+    const statusCode = err.statusCode || 500;
+    return reply
+      .code(statusCode)
+      .send({ message: err.message || "Internal server error" });
+  }
+}

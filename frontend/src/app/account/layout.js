@@ -38,13 +38,13 @@ export default function AccountLayout({ children }) {
       key: "profile",
       label: "Hồ sơ cá nhân",
       href: "/account/profile",
-      icon: "👤",
+      icon: "",
     },
     {
       key: "password",
       label: "Đổi mật khẩu",
       href: "/account/password",
-      icon: "🔐",
+      icon: "",
     },
   ];
 
@@ -101,7 +101,7 @@ export default function AccountLayout({ children }) {
               onClick={handleLogout}
               className="w-full flex items-center gap-3 px-3 py-2 text-sm text-red-500 hover:bg-red-50 rounded-lg"
             >
-              <span>🚪</span>
+              <span></span>
               <span>Đăng xuất</span>
             </button>
           </div>

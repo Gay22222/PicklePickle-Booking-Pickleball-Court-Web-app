@@ -49,7 +49,14 @@ export default function LoginPage() {
         window.dispatchEvent(new Event("pp-auth-changed"));
       }
 
-      router.push("/");
+      if (data.user.role === "OWNER") {
+        router.push("/owner/dashboard");
+      } else if (data.user.role === "ADMIN") {
+        router.push("/admin/dashboard");
+      } else {
+        router.push("/");
+      }
+
     } catch (err) {
       setError(err.message);
     } finally {

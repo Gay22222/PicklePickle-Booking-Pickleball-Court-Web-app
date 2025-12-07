@@ -8,12 +8,9 @@ import { useRouter, usePathname } from "next/navigation";
 export default function Header() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userName, setUserName] = useState("");
+  const [userRole, setUserRole] = useState(""); // OWNER / ADMIN / ...
   const router = useRouter();
   const pathname = usePathname();
-
-  // Xác định có phải route backoffice không
-  const isBackoffice =
-    pathname.startsWith("/owner") || pathname.startsWith("/admin");
 
   const syncFromStorage = () => {
     if (typeof window === "undefined") return;
@@ -25,13 +22,16 @@ export default function Header() {
         const user = JSON.parse(rawUser);
         setIsLoggedIn(true);
         setUserName(user.fullName || user.email || "User");
+        setUserRole(user.role || "");
       } catch {
         setIsLoggedIn(false);
         setUserName("");
+        setUserRole("");
       }
     } else {
       setIsLoggedIn(false);
       setUserName("");
+      setUserRole("");
     }
   };
 
@@ -50,17 +50,33 @@ export default function Header() {
       localStorage.removeItem("pp_user");
       window.dispatchEvent(new Event("pp-auth-changed"));
     }
+    setUserRole("");
     router.push("/login");
   };
 
   // =========================
-  //  HEADER BACKOFFICE
+  //  HEADER BACKOFFICE (OWNER / ADMIN)
   // =========================
+
+  // là backoffice nếu role là OWNER/ADMIN hoặc đang ở /owner /admin
+  const isBackoffice =
+    userRole === "OWNER" ||
+    userRole === "ADMIN" ||
+    pathname.startsWith("/owner") ||
+    pathname.startsWith("/admin");
+
   if (isBackoffice) {
+    const isAdmin =
+      userRole === "ADMIN" || pathname.startsWith("/admin");
+
     // Label hiển thị bên phải: ADMIN hay CHỦ SÂN
-    const roleLabel = pathname.startsWith("/admin") ? "ADMIN" : "CHỦ SÂN";
+    const roleLabel = isAdmin ? "ADMIN" : "CHỦ SÂN";
     const displayInitial =
       (userName && userName[0]?.toUpperCase()) || roleLabel[0];
+
+    const handleGoProfile = () => {
+      router.push("/account/profile");
+    };
 
     return (
       <header className="bg-[#032341] text-white h-12 flex items-center shadow-sm">
@@ -68,7 +84,13 @@ export default function Header() {
           {/* Logo + brand */}
           <button
             type="button"
-            onClick={() => router.push("/")}
+            onClick={() => {
+              if (isAdmin) {
+                router.push("/admin/dashboard");
+              } else {
+                router.push("/owner/dashboard");
+              }
+            }}
             className="flex items-center gap-2"
           >
             <Image
@@ -83,7 +105,7 @@ export default function Header() {
             </span>
           </button>
 
-          {/* Icons + role */}
+          {/* Icons + user area */}
           <div className="flex items-center gap-4">
             {/* Search */}
             <button
@@ -111,34 +133,45 @@ export default function Header() {
               />
             </button>
 
-            {/* Bell + badge */}
-            {/* Bell + badge */}
+            {/* Bell */}
             <button
               type="button"
               className="relative p-1.5 rounded-full hover:bg-[#04152c] transition-colors"
             >
-              <Image
-                src="/Bell.svg"
-                alt="Thông báo"
-                width={18}
-                height={18}
-              />
-
-              
-
+              <Image src="/Bell.svg" alt="Thông báo" width={18} height={18} />
             </button>
 
+            {/* Avatar + tên + role + logout */}
+            <div className="flex items-center gap-3">
+              {/* Avatar + tên (click để vào profile) */}
+              <button
+                type="button"
+                onClick={handleGoProfile}
+                className="flex items-center gap-2"
+              >
+                <div className="w-8 h-8 rounded-full bg-sky-500 flex items-center justify-center text-xs font-semibold">
+                  {displayInitial}
+                </div>
 
+                <div className="flex flex-col items-start leading-tight text-left">
+                  <span className="text-[11px] opacity-70">Xin chào</span>
+                  <span className="text-xs font-semibold truncate max-w-[120px]">
+                    {userName || roleLabel}
+                  </span>
+                  <span className="text-[10px] uppercase opacity-70">
+                    {roleLabel}
+                  </span>
+                </div>
+              </button>
 
-
-            {/* Avatar + role label (ADMIN / CHỦ SÂN) */}
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-full bg-sky-500 flex items-center justify-center text-xs font-semibold">
-                {displayInitial}
-              </div>
-              <span className="text-xs font-semibold uppercase">
-                {roleLabel}
-              </span>
+              {/* Đăng xuất */}
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="text-[11px] font-semibold px-3 py-1 rounded-full border border-white/30 hover:bg:white hover:text-[#032341] transition-colors"
+              >
+                Đăng xuất
+              </button>
             </div>
           </div>
         </nav>
@@ -147,8 +180,8 @@ export default function Header() {
   }
 
   // =========================
-  //  HEADER USER (PUBLIC) – GIỮ NGUYÊN
-  // ========================= :contentReference[oaicite:0]{index=0}
+  //  HEADER USER (PUBLIC)
+  // =========================
   return (
     <header className="pp-header">
       <nav className="pp-header__inner">

@@ -1,10 +1,14 @@
+// src/modules/addons/addon.routes.js
 import {
   listAddonsHandler,
   getAddonByCodeHandler,
 } from "./addon.controller.js";
 
 export default async function addonRoutes(app, opts) {
-  // Public: list all addons (optionally filter by ?category=equipment|drink|support)
+  // Public: list all addons
+  // Optional filter:
+  //  - ?category=equipment|drink|support
+  //  - ?venueId=<ObjectId sân>  -> để mỗi sân có phụ kiện riêng
   app.get(
     "/addons",
     {
@@ -15,6 +19,9 @@ export default async function addonRoutes(app, opts) {
             category: {
               type: "string",
               enum: ["equipment", "drink", "support"],
+            },
+            venueId: {
+              type: "string",
             },
           },
         },

@@ -4,10 +4,10 @@ const { Schema } = mongoose;
 const addonSchema = new Schema(
   {
     // Mã nội bộ, trùng với id FE đang dùng: "balls", "racket-rent", ...
+    // Không để unique toàn hệ thống nữa, mà unique theo (venue + code)
     code: {
       type: String,
       required: true,
-      unique: true,
       trim: true,
     },
 
@@ -45,6 +45,14 @@ const addonSchema = new Schema(
       trim: true,
     },
 
+    // MỖI PHỤ KIỆN GẮN VỚI 1 SÂN
+    venue: {
+      type: Schema.Types.ObjectId,
+      ref: "Venue",
+      required: true,
+      index: true,
+    },
+
     description: {
       type: String,
       default: "",
@@ -62,7 +70,12 @@ const addonSchema = new Schema(
   }
 );
 
+// Tìm kiếm danh sách: theo category + isActive
 addonSchema.index({ category: 1, isActive: 1 });
+// Đảm bảo cùng một sân không bị trùng code
+addonSchema.index({ venue: 1, code: 1 }, { unique: true });
+// Tiện filter theo sân
+addonSchema.index({ venue: 1, isActive: 1 });
 
 export const Addon =
   mongoose.models.Addon || mongoose.model("Addon", addonSchema);

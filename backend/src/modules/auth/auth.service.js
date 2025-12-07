@@ -3,12 +3,12 @@ import { User } from "../../models/user.model.js";
 import { config } from "../../config/env.js";
 import { hashPassword, verifyPassword } from "../../shared/utils/password.js";
 import { sendVerificationEmail } from "../../shared/email/emailClient.js";
-
+import { UserRole } from "../../models/userRole.model.js";
 function generateOtp() {
     return String(Math.floor(100000 + Math.random() * 900000));
 }
 
-function toSafeUser(user) {
+function toSafeUser(user, roleCode) {
     if (!user) return null;
     return {
         id: user._id.toString(),
@@ -19,16 +19,19 @@ function toSafeUser(user) {
         isActive: user.isActive,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
+        role: roleCode || undefined,
     };
 }
 
-function signToken(user) {
+function signToken(user, roleCode) {
     const payload = {
         sub: user._id.toString(),
         fullName: user.fullName,
         emailVerified: user.emailVerified,
     };
-
+    if (roleCode) {
+        payload.role = roleCode;
+    }
     const token = jwt.sign(payload, config.jwtSecret, {
         expiresIn: "1d",
     });
@@ -153,7 +156,6 @@ export async function resendEmailOtp(input) {
     return payload;
 }
 
-// ========== LOGIN ==========
 export async function loginUser(input) {
     const { identifier, password } = input;
 
@@ -161,25 +163,40 @@ export async function loginUser(input) {
         throw new Error("Thiếu thông tin đăng nhập");
     }
 
+    // login bằng email hoặc phone
     const user = await User.findOne({
         $or: [{ email: identifier }, { phone: identifier }],
     });
 
-    if (!user) throw new Error("Sai thông tin đăng nhập");
-    if (!user.isActive) throw new Error("Tài khoản đã bị khóa");
+    if (!user) {
+        throw new Error("Sai thông tin đăng nhập");
+    }
+
+    if (!user.isActive) {
+        throw new Error("Tài khoản đã bị khóa");
+    }
 
     const ok = await verifyPassword(password, user.passwordHash);
-    if (!ok) throw new Error("Sai thông tin đăng nhập");
+    if (!ok) {
+        throw new Error("Sai thông tin đăng nhập");
+    }
 
     if (!user.emailVerified) {
         throw new Error("Email chưa được xác minh");
     }
 
+    // ---- Lấy role chính của user từ userroles ----
+    const userRole = await UserRole.findOne({ user: user._id }).populate("role");
+    const roleCode = userRole?.role?.code || "CUSTOMER";
+
+    // cập nhật last login
     user.lastLoginAt = new Date();
     await user.save();
 
-    const safeUser = toSafeUser(user);
-    const token = signToken(user);
+    const safeUser = toSafeUser(user, roleCode);
+    const token = signToken(user, roleCode);
 
     return { user: safeUser, token };
 }
+
+

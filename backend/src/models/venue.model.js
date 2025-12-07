@@ -11,6 +11,7 @@ const venueSchema = new Schema(
     longitude:  { type: Number },
     timeZone:   { type: String, default: "Asia/Ho_Chi_Minh" },
     slotMinutes:{ type: Number, default: 60 },
+    isActive:   { type: Boolean, default: true },
 
     manager:    { type: Schema.Types.ObjectId, ref: "User" }, // owner chính
 

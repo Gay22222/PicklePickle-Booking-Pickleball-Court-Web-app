@@ -1,3 +1,4 @@
+// src/modules/addons/addon.controller.js
 import {
   listAddonsService,
   getAddonByCodeService,
@@ -5,9 +6,9 @@ import {
 
 export async function listAddonsHandler(request, reply) {
   try {
-    const { category } = request.query || {};
+    const { category, venueId } = request.query || {};
 
-    const data = await listAddonsService({ category });
+    const data = await listAddonsService({ category, venueId });
 
     return reply.send({ data });
   } catch (err) {
