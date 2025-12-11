@@ -44,14 +44,15 @@ export async function searchVenues({
   page = 1,
   limit = 8,
 }) {
-  const filter = {};
+  // CHỈ LẤY SÂN ĐANG ACTIVE
+  const filter = { isActive: true };
 
   if (keyword) {
     filter.name = { $regex: keyword, $options: "i" };
   }
 
   if (area) {
-    // nếu FE gửi key (q1, quan7,...) thì map sang tên quận;
+    // nếu FE gửi key (q1, quan7, ...) thì map sang tên quận;
     // nếu FE gửi thẳng "Quận 7" thì dùng luôn
     const mapped = AREA_MAP[area] || area;
     filter.district = mapped;

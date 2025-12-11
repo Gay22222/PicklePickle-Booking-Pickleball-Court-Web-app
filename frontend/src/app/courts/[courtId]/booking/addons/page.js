@@ -260,7 +260,7 @@ export default function CourtBookingAddonsPage() {
                 )}
 
                 {/* SECTION 2: Dịch vụ thêm */}
-                <AddonsSection onChange={setAddonsSummary} />
+                <AddonsSection venueId={courtId} onChange={setAddonsSummary} />
 
                 {/* Nút tiếp tục */}
                 <div className="flex justify-end">

@@ -4,6 +4,18 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE;
+
+function resolveImageUrl(raw) {
+  if (!raw) return "";
+  if (typeof raw !== "string") return "";
+  if (raw.startsWith("/uploads/")) {
+    return `${API_BASE}${raw}`; // http://localhost:4000/api/uploads/...
+  }
+  return raw; // /courts/... trong public
+}
+
+
 export default function CourtHeroSection({ court, venueId }) {
   const router = useRouter();
 
@@ -22,7 +34,7 @@ export default function CourtHeroSection({ court, venueId }) {
       : ["/courts/sample1.png", "/courts/sample2.png", "/courts/sample3.png"];
 
   const defaultDescription =
-    "Câu lạc bộ PickoLand Thảo Điền Pickleball là một trong những địa điểm chơi pickleball phổ biến nhất tại TP. Hồ Chí Minh, Việt Nam. Ở đây có 5 sân ngoài trời mặt cứng. Tất cả đều là sân chuyên dụng với vạch kẻ và lưới cố định. Để chơi, bạn cần có hội viên. Có thể đặt sân trước. Cơ sở vật chất bao gồm nhà vệ sinh, hệ thống đèn chiếu sáng và cửa hàng pro shop/thiết bị.";
+    "Câu lạc bộ PickoLand Thảo Điền Pickleball là một trong nhữn...ệ sinh, hệ thống đèn chiếu sáng và cửa hàng pro shop/thiết bị.";
 
   const fullDescription =
     description && description.trim().length > 0
@@ -176,22 +188,20 @@ export default function CourtHeroSection({ court, venueId }) {
       {/* RIGHT – slider */}
       <div className="relative h-[260px] w-full overflow-hidden rounded-2xl md:h-[320px]">
         {heroImages.map((src, index) => (
-          <Image
-            key={src}
-            src={src}
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            key={`${src}-${index}`}
+            src={resolveImageUrl(src)}
             alt={`Ảnh sân ${index + 1}`}
-            fill
-            className={`absolute inset-0 object-cover transition-opacity duration-700 ${
-              index === currentIndex ? "opacity-100" : "opacity-0"
-            }`}
-            sizes="(min-width: 768px) 400px, 100vw"
+            className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${index === currentIndex ? "opacity-100" : "opacity-0"
+              }`}
           />
         ))}
 
         <button
           type="button"
           onClick={goPrev}
-          className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-white/80 p-2 shadow-md backdrop-blur transition hover:bg-white"
+          className="absolute left-3 top-1/2 -translate-y-1/2 ro...-white/80 p-2 shadow-md backdrop-blur transition hover:bg-white"
         >
           <Image
             src="/courts/prevIcon.svg"
@@ -204,7 +214,7 @@ export default function CourtHeroSection({ court, venueId }) {
         <button
           type="button"
           onClick={goNext}
-          className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-white/80 p-2 shadow-md backdrop-blur transition hover:bg-white"
+          className="absolute right-3 top-1/2 -translate-y-1/2 r...-white/80 p-2 shadow-md backdrop-blur transition hover:bg-white"
         >
           <Image
             src="/courts/nextIcon.svg"

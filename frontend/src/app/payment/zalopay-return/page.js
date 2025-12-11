@@ -3,6 +3,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { useEffect } from "react";
+import { apiFetch } from "@/lib/apiClient";
 
 export default function ZalopayReturnPage() {
   const searchParams = useSearchParams();
@@ -19,6 +21,22 @@ export default function ZalopayReturnPage() {
     amount && !Number.isNaN(Number(amount))
       ? Number(amount).toLocaleString("vi-VN")
       : null;
+
+  // Đồng bộ trạng thái thanh toán về backend
+  useEffect(() => {
+    if (!appTransId) return;
+
+    apiFetch("/payments/confirm-return", {
+      method: "POST",
+      body: {
+        provider: "ZALOPAY",
+        orderId: appTransId,
+        success: isSuccess,
+      },
+    }).catch((err) => {
+      console.error("Sync payment from ZaloPay return failed:", err);
+    });
+  }, [appTransId, isSuccess]);
 
   return (
     <main className="min-h-screen bg-[#f5f7fb] flex flex-col items-center pt-24 px-4 text-gray-900">
@@ -54,9 +72,7 @@ export default function ZalopayReturnPage() {
           {appTransId && (
             <div className="flex justify-between text-sm mb-2">
               <span className="text-gray-500">Mã giao dịch</span>
-              <span className="font-medium text-gray-800">
-                {appTransId}
-              </span>
+              <span className="font-medium text-gray-800">{appTransId}</span>
             </div>
           )}
 

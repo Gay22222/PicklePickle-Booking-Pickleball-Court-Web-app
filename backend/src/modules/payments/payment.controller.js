@@ -1,7 +1,12 @@
 // src/modules/payments/payment.controller.js
-import { createCheckout, handleMomoIpn, handleVnpayIpn } from "./payment.service.js";
+import {
+  createCheckout,
+  handleMomoIpn,
+  handleVnpayIpn,
+  confirmPaymentFromReturn,
+} from "./payment.service.js";
 
-// body: { paymentMethod: "MOMO" | "VNPAY" | "PAYPAL", bookingId: "<id>" }
+// body: { paymentMethod: "MOMO" | "VNPAY" | "ZALOPAY", bookingId: "<id>" }
 export async function createCheckoutHandler(request, reply) {
   try {
     const payload = request.body || {};
@@ -12,7 +17,6 @@ export async function createCheckoutHandler(request, reply) {
       request.socket?.remoteAddress ||
       request.ip;
 
-    
     const result = await createCheckout({ ...payload, clientIp });
 
     return reply.code(201).send({ data: result });
@@ -48,5 +52,29 @@ export async function vnpayIpnHandler(request, reply) {
     return reply
       .code(400)
       .send({ RspCode: "99", Message: err.message || "Invalid VNPay IPN" });
+  }
+}
+
+// Confirm từ trang return (không dùng IPN)
+export async function confirmPaymentFromReturnHandler(request, reply) {
+  try {
+    const { provider, orderId, success } = request.body || {};
+
+    const data = await confirmPaymentFromReturn({
+      provider,
+      orderId,
+      success: !!success,
+    });
+
+    return reply.code(200).send({
+      message: "Payment status synced from return page",
+      data,
+    });
+  } catch (err) {
+    request.log.error(err, "confirmPaymentFromReturnHandler error");
+    const statusCode = err.statusCode || 500;
+    return reply
+      .code(statusCode)
+      .send({ message: err.message || "Failed to confirm payment" });
   }
 }

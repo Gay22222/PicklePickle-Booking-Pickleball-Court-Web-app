@@ -9,6 +9,29 @@ import { VenueOpenHour } from "../../models/venueOpenHour.model.js";
 import { VenueHoliday } from "../../models/venueHoliday.model.js";
 import { BlackoutSlot } from "../../models/blackoutSlot.model.js";
 import { Payment } from "../../models/payment.model.js";
+import { getVenueConfigForDay } from "../venueConfig/venueConfig.service.js";
+import { PriceRule } from "../../models/priceRule.model.js";
+import mongoose from "mongoose";
+
+
+const BASE_OPEN_HOUR = 5;   // 05:00 
+// const BASE_CLOSE_HOUR = 22; //
+
+function parseHour(str) {
+  // "17:00" -> 17
+  if (!str) return null;
+  const [h] = str.split(":");
+  const n = Number(h);
+  return Number.isNaN(n) ? null : n;
+}
+
+function isHourInRange(hour, from, to) {
+  // from/to là "HH:MM"
+  const hFrom = parseHour(from);
+  const hTo = parseHour(to);
+  if (hFrom === null || hTo === null) return false;
+  return hour >= hFrom && hour < hTo;
+}
 
 // ================== Helpers ==================
 
@@ -51,6 +74,62 @@ function minutesToTimeStr(total) {
   const m = total % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
+
+
+// Lấy [minStartHour, maxEndHour] từ danh sách priceRules trong ngày
+function getHoursRangeFromPriceRules(priceRules) {
+  if (!Array.isArray(priceRules) || priceRules.length === 0) {
+    return null;
+  }
+
+  let minFromHour = 23;
+  let maxToHour = 0;
+
+  for (const r of priceRules) {
+    if (!r.timeFrom || !r.timeTo) continue;
+
+    const fromH = parseInt(r.timeFrom.slice(0, 2), 10);
+    const toH = parseInt(r.timeTo.slice(0, 2), 10);
+
+    if (!Number.isNaN(fromH)) {
+      minFromHour = Math.min(minFromHour, fromH);
+    }
+    if (!Number.isNaN(toH)) {
+      maxToHour = Math.max(maxToHour, toH);
+    }
+  }
+
+  if (maxToHour <= minFromHour) return null;
+  return { minFromHour, maxToHour };
+}
+
+// Lấy pricePerHour cho 1 slot theo danh sách priceRules
+function getPriceForSlotFromRules(priceRules, hour, bookingType = "online") {
+  if (!Array.isArray(priceRules) || priceRules.length === 0) return null;
+
+  const hhmm = `${String(hour).padStart(2, "0")}:00`;
+
+  const rule = priceRules.find((r) => {
+    if (!r.timeFrom || !r.timeTo) return false;
+    const from = r.timeFrom.slice(0, 5);
+    const to = r.timeTo.slice(0, 5);
+    return from <= hhmm && hhmm < to;
+  });
+
+  if (!rule) return null;
+
+  // Online booking: ưu tiên fixedPricePerHour
+  if (bookingType === "walkin") {
+    if (typeof rule.walkinPricePerHour === "number") return rule.walkinPricePerHour;
+    if (typeof rule.fixedPricePerHour === "number") return rule.fixedPricePerHour;
+  } else {
+    if (typeof rule.fixedPricePerHour === "number") return rule.fixedPricePerHour;
+    if (typeof rule.walkinPricePerHour === "number") return rule.walkinPricePerHour;
+  }
+
+  return null;
+}
+
 
 // Rule mock giá (giống FE): slotIndex = giờ (05–22)
 function getPricePerHourFromSlotIndex(slotIndex) {
@@ -227,7 +306,12 @@ export async function createBookingFromSlots(payload) {
 
 // ================== Service: availability venue ==================
 
+
+// Input: { venueId, dateStr: "YYYY-MM-DD" }
 export async function getVenueAvailability({ venueId, dateStr }) {
+  if (!venueId) throw new Error("venueId is required");
+  if (!dateStr) throw new Error("date is required (YYYY-MM-DD)");
+
   const date = new Date(`${dateStr}T00:00:00.000Z`);
   if (Number.isNaN(date.getTime())) {
     throw new Error("Invalid date format, expected YYYY-MM-DD");
@@ -242,24 +326,27 @@ export async function getVenueAvailability({ venueId, dateStr }) {
       venueId,
       date: dateStr,
       slotMinutes: venue.slotMinutes || 60,
+      openTime: null,
+      closeTime: null,
       courts: [],
     };
   }
 
-  const weekday = date.getDay(); // 0 (CN) - 6 (T7)
+  // JS day: 0 = CN, 1 = T2, ..., 6 = T7
+  const weekday = date.getDay();
+  const isoDay = weekday === 0 ? 7 : weekday; // 1..7
 
+  // 1) Kiểm tra ngày nghỉ
   const holiday = await VenueHoliday.findOne({ venue: venueId, date });
-  const openHour = await VenueOpenHour.findOne({ venue: venueId, weekday });
-
-  if (!openHour || holiday) {
+  if (holiday) {
     return {
       venueId,
       date: dateStr,
       slotMinutes: venue.slotMinutes || 60,
-      openTime: openHour?.timeFrom ?? null,
-      closeTime: openHour?.timeTo ?? null,
-      isHoliday: !!holiday,
-      holidayReason: holiday?.reason ?? null,
+      openTime: null,
+      closeTime: null,
+      isHoliday: true,
+      holidayReason: holiday.reason || null,
       courts: courts.map((c) => ({
         courtId: c._id.toString(),
         courtName: c.name,
@@ -268,11 +355,70 @@ export async function getVenueAvailability({ venueId, dateStr }) {
     };
   }
 
-  const firstSlotIndex = parseInt(openHour.timeFrom.slice(0, 2), 10);
-  const lastSlotIndex = parseInt(openHour.timeTo.slice(0, 2), 10) - 1;
+  // 2) Lấy giờ mở cửa theo weekday (config open hours)
+  let openHour = await VenueOpenHour.findOne({ venue: venueId, weekday }).lean();
+
+  if (!openHour) {
+    // Fallback nếu chưa config open hours
+    openHour = {
+      timeFrom: "05:00",
+      timeTo: "22:00",
+    };
+  }
+
+  let baseStartHour = parseInt(openHour.timeFrom.slice(0, 2), 10);
+  let baseEndHourExclusive = parseInt(openHour.timeTo.slice(0, 2), 10); // exclusive
+
+  if (
+    Number.isNaN(baseStartHour) ||
+    Number.isNaN(baseEndHourExclusive) ||
+    baseEndHourExclusive <= baseStartHour
+  ) {
+    throw new Error("Invalid open hour config for venue");
+  }
+
+  // 3) Lấy PriceRule theo ngày, dùng để:
+  //    - Xác định khung giờ thực sự hiển thị
+  //    - Tính giá cho từng slot
+  const priceRulesForDay = await PriceRule.find({
+    venue: venueId,
+    dayOfWeekFrom: { $lte: isoDay },
+    dayOfWeekTo: { $gte: isoDay },
+  }).lean();
+
+  const rangeFromRules = getHoursRangeFromPriceRules(priceRulesForDay);
+  if (rangeFromRules) {
+    const { minFromHour, maxToHour } = rangeFromRules;
+    // Chỉ cho phép đặt trong [max(openHour, minRule), min(closeHour, maxRule))
+    baseStartHour = Math.max(baseStartHour, minFromHour);
+    baseEndHourExclusive = Math.min(baseEndHourExclusive, maxToHour);
+  }
+
+  // Nếu sau khi giao cắt mà không còn giờ hợp lệ => không có slot nào
+  if (baseEndHourExclusive <= baseStartHour) {
+    return {
+      venueId,
+      date: dateStr,
+      slotMinutes: venue.slotMinutes || 60,
+      openTime: null,
+      closeTime: null,
+      isHoliday: false,
+      holidayReason: null,
+      courts: courts.map((c) => ({
+        courtId: c._id.toString(),
+        courtName: c.name,
+        slots: [],
+      })),
+    };
+  }
+
+  const firstSlotIndex = baseStartHour; // ví dụ 6
+  const lastSlotIndex = baseEndHourExclusive - 1; // ví dụ 22 nếu close 23:00
+  const slotMinutes = venue.slotMinutes || 60;
 
   const courtIds = courts.map((c) => c._id);
 
+  // 4) Lấy bookingSlots + blackout trong ngày
   const bookingSlots = await BookingSlot.find({
     court: { $in: courtIds },
     date,
@@ -295,25 +441,31 @@ export async function getVenueAvailability({ venueId, dateStr }) {
     }
   }
 
-  const slotMinutes = venue.slotMinutes || 60;
-
+  // 5) Build slots cho từng court, gán đúng giá theo PriceRule
   const courtsWithSlots = courts.map((c) => {
     const slots = [];
+
     for (let idx = firstSlotIndex; idx <= lastSlotIndex; idx += 1) {
       const startMin = idx * 60;
       const endMin = startMin + slotMinutes;
 
-      let status = "available";
       const key = `${c._id.toString()}#${idx}`;
+      let status = "available";
       if (bookedSet.has(key)) status = "booked";
       if (blackoutSet.has(key)) status = "blackout";
 
+      // Giá: ưu tiên lấy từ PriceRule, fallback mock nếu chưa cấu hình
+      let pricePerHour = getPriceForSlotFromRules(priceRulesForDay, idx, "online");
+      if (pricePerHour == null) {
+        pricePerHour = getPricePerHourFromSlotIndex(idx);
+      }
+
       slots.push({
         slotIndex: idx,
-        timeFrom: minutesToTimeStr(startMin),
+        timeFrom: minutesToTimeStr(startMin), // "HH:00"
         timeTo: minutesToTimeStr(endMin),
         status,
-        pricePerHour: getPricePerHourFromSlotIndex(idx),
+        pricePerHour,
       });
     }
 
@@ -328,14 +480,16 @@ export async function getVenueAvailability({ venueId, dateStr }) {
     venueId,
     date: dateStr,
     slotMinutes,
-    weekday,
-    openTime: openHour.timeFrom,
-    closeTime: openHour.timeTo,
+    weekday, // giữ nguyên 0..6 như cũ
+    openTime: minutesToTimeStr(baseStartHour * 60),
+    closeTime: minutesToTimeStr(baseEndHourExclusive * 60),
     isHoliday: false,
     holidayReason: null,
     courts: courtsWithSlots,
   };
 }
+
+
 
 // ================== Service: lịch sử user ==================
 
@@ -490,7 +644,176 @@ export async function getUserBookingHistory({
   };
 }
 
+export async function getUserBookingDetail({ userId, bookingId }) {
+  if (!userId) {
+    const err = new Error("userId is required");
+    err.statusCode = 401;
+    throw err;
+  }
+
+  if (!bookingId) {
+    const err = new Error("bookingId is required");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(bookingId)) {
+    const err = new Error("Invalid bookingId");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const booking = await Booking.findOne({
+    _id: bookingId,
+    user: userId,
+  })
+    .populate("venue", "name address phone heroAddress heroPhone")
+    .populate("status", "code label isFinal isCancel")
+    .lean();
+
+  if (!booking) {
+    const err = new Error("Booking not found");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const items = await BookingItem.find({ booking: booking._id })
+    .populate("court", "name")
+    .sort({ date: 1, slotStart: 1 })
+    .lean();
+
+  const payments = await Payment.find({ booking: booking._id })
+    .populate("status", "code label isSuccess isFinal")
+    .sort({ createdAt: 1 })
+    .lean();
+
+  // === helper: convert slotIndex -> HH:MM ===
+  function slotIndexToTimeLabel(slotIndex) {
+    // 1 slot = 60 minutes, bắt đầu từ 5:00 (theo logic chung)
+    const baseHour = 5;
+    const totalMinutes = baseHour * 60 + slotIndex * 60;
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  }
+
+  // === build từng dòng khung giờ / sân ===
+  const lineItems = items.map((it, idx) => {
+    const date = new Date(it.date);
+    const dateLabel = date.toLocaleDateString("vi-VN", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+
+    const timeFrom = slotIndexToTimeLabel(it.slotStart);
+    const timeTo = slotIndexToTimeLabel(it.slotEnd + 1);
+
+    return {
+      id: it._id.toString(),
+      index: idx + 1, // dùng cho FE nếu cần
+      courtName: it.court?.name || "Sân",
+      date: it.date,
+      dateLabel,
+      slotStart: it.slotStart,
+      slotEnd: it.slotEnd,
+      timeFrom,
+      timeTo,
+      timeLabel: `${timeFrom} - ${timeTo}`,
+      unitPrice: it.unitPrice ?? null,
+      lineAmount: it.lineAmount ?? null,
+    };
+  });
+
+  // === dateLabel chung cho cả đơn (lấy theo booking.date hoặc item đầu) ===
+  let mainDateLabel = "";
+  if (booking.date) {
+    const d = new Date(booking.date);
+    if (!Number.isNaN(d.getTime())) {
+      mainDateLabel = d.toLocaleDateString("vi-VN", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      });
+    }
+  } else if (items.length > 0) {
+    const d = new Date(items[0].date);
+    if (!Number.isNaN(d.getTime())) {
+      mainDateLabel = d.toLocaleDateString("vi-VN", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      });
+    }
+  }
+
+  // tổng số slot (để FE muốn ghi "2 khung giờ" thì chỉ cần dựa vào đây)
+  const slotCount = items.reduce(
+    (sum, it) => sum + (it.slotEnd - it.slotStart + 1),
+    0
+  );
+
+  const lastPayment = payments.length ? payments[payments.length - 1] : null;
+
+  return {
+    id: booking._id.toString(),
+    code: booking.code,
+    createdAt: booking.createdAt,
+
+    // ngày hiển thị chính (FE show ở header)
+    dateLabel: mainDateLabel,
+
+    // không trả timeRange gộp nữa, FE dùng items để hiển thị từng khung giờ
+    slotCount,
+
+    venue: {
+      id: booking.venue?._id?.toString(),
+      name: booking.venue?.name || "",
+      address:
+        booking.venue?.heroAddress ||
+        booking.venue?.address ||
+        "",
+      phone: booking.venue?.heroPhone || booking.venue?.phone || "",
+    },
+
+    status: {
+      code: booking.status?.code,
+      label: booking.status?.label,
+      isFinal: booking.status?.isFinal ?? false,
+      isCancel: booking.status?.isCancel ?? false,
+    },
+
+    amount: {
+      grossAmount: booking.grossAmount ?? 0,
+      discount: booking.discount ?? 0,
+      totalAmount: booking.totalAmount ?? 0,
+    },
+
+    // danh sách chi tiết khung giờ
+    items: lineItems,
+
+    // payment cuối cùng (nếu có)
+    payment: lastPayment
+      ? {
+        provider: lastPayment.provider,
+        amount: lastPayment.amount,
+        currency: lastPayment.currency,
+        statusCode: lastPayment.status?.code,
+        statusLabel: lastPayment.status?.label,
+        isSuccess: lastPayment.status?.isSuccess ?? false,
+        isFinal: lastPayment.status?.isFinal ?? false,
+        createdAt: lastPayment.createdAt,
+      }
+      : null,
+
+    // text chung chung cho dịch vụ thêm (FE chỉ cần hiển thị nếu muốn)
+    extraServicesNote: "Có thể kèm dịch vụ thêm (nước uống, dụng cụ, phụ trợ).",
+  };
+}
+
+
 // ================== Service: owner daily overview ==================
+
 
 export async function getOwnerDailyOverview({ ownerId, dateStr, venueId }) {
   if (!ownerId) {
@@ -587,10 +910,47 @@ export async function getOwnerDailyOverview({ ownerId, dateStr, venueId }) {
     const startTime = slotIndexToTime(slotStart);
     const endTime = slotIndexToTime(slotEnd + 1);
 
-    let normalizedStatus = "active";
-    if (statusDoc.isCancel) normalizedStatus = "cancelled";
-    else if (statusDoc.isFinal) normalizedStatus = "completed";
-    else if (statusDoc.code === "PENDING") normalizedStatus = "pending";
+    // ================== PHÂN LOẠI STATUS ==================
+    // Ưu tiên: cancelled > completed > pending
+    let normalizedStatus = "pending";
+
+    // ngày + giờ hiện tại (server)
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10); // "YYYY-MM-DD"
+    const currentHour = now.getHours();
+
+    // slot index ở đây chính là giờ thực tế (06,07,...)
+    const startHour = slotStart;
+    const endHour = slotEnd + 1; // vì hiển thị đến HH+1:00
+
+    if (statusDoc.isCancel) {
+      // 1) ĐÃ HỦY: luôn ưu tiên hiển thị "Đã huỷ"
+      normalizedStatus = "cancelled";
+    } else if (statusDoc.isFinal) {
+      // 2) Các trạng thái final như COMPLETED / NO_SHOW
+      normalizedStatus = "completed";
+    } else {
+      // 3) Các trạng thái chưa final (PENDING, CONFIRMED, ...)
+      //    -> dựa vào ngày + giờ để quyết định pending / completed
+
+      if (dateStr < todayStr) {
+        // Ngày đã qua
+        normalizedStatus = "completed";
+      } else if (dateStr > todayStr) {
+        // Ngày tương lai
+        normalizedStatus = "pending";
+      } else {
+        // Cùng ngày hôm nay
+        if (currentHour >= endHour) {
+          // Qua giờ đặt sân -> Đã xong
+          normalizedStatus = "completed";
+        } else {
+          // Chưa đến giờ / đang trong khung giờ -> vẫn coi là "Đã đặt"
+          normalizedStatus = "pending";
+        }
+      }
+    }
+
 
     return {
       id: item._id.toString(),
@@ -620,5 +980,234 @@ export async function getOwnerDailyOverview({ ownerId, dateStr, venueId }) {
     date: dateStr,
     availability,
     bookings: rows,
+  };
+}
+
+// ================== Service: admin daily overview ==================
+
+export async function getAdminDailyOverview({ dateStr, venueId }) {
+  if (!dateStr) {
+    const err = new Error("Query param 'date' (YYYY-MM-DD) is required");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const bookingDate = new Date(`${dateStr}T00:00:00.000Z`);
+  if (Number.isNaN(bookingDate.getTime())) {
+    const err = new Error("Invalid date format, expected YYYY-MM-DD");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  // KHÁC SO VỚI OWNER: KHÔNG FILTER THEO manager (ownerId)
+  let venue;
+  if (venueId) {
+    // Admin được xem bất kỳ venue nào
+    venue = await Venue.findOne({
+      _id: venueId,
+      isActive: true,
+    }).lean();
+  } else {
+    // Nếu không truyền venueId thì lấy venue đầu tiên còn active
+    venue = await Venue.findOne({
+      isActive: true,
+    })
+      .sort({ createdAt: 1 })
+      .lean();
+  }
+
+  if (!venue) {
+    return {
+      venue: null,
+      date: dateStr,
+      availability: null,
+      bookings: [],
+    };
+  }
+
+  const availability = await getVenueAvailability({
+    venueId: venue._id,
+    dateStr,
+  });
+
+  const courtIds = (availability.courts || []).map((c) => c.courtId);
+  if (!courtIds.length) {
+    return {
+      venue: {
+        id: venue._id.toString(),
+        name: venue.name,
+        address: venue.address,
+      },
+      date: dateStr,
+      availability,
+      bookings: [],
+    };
+  }
+
+  const bookingItems = await BookingItem.find({
+    court: { $in: courtIds },
+    date: bookingDate,
+  })
+    .populate({
+      path: "booking",
+      populate: [
+        { path: "status", select: "code label isFinal isCancel" },
+        { path: "user", select: "fullName name phoneNumber phone" },
+      ],
+    })
+    .populate("court", "name")
+    .lean();
+
+  function slotIndexToTime(idx) {
+    const hh = String(idx).padStart(2, "0");
+    return `${hh}:00`;
+  }
+
+  const rows = bookingItems.map((item) => {
+    const booking = item.booking || {};
+    const user = booking.user || {};
+    const statusDoc = booking.status || {};
+    const court = item.court || {};
+
+    const slotStart = item.slotStart;
+    const slotEnd = item.slotEnd;
+
+    const startTime = slotIndexToTime(slotStart);
+    const endTime = slotIndexToTime(slotEnd + 1);
+
+    // Ưu tiên: cancelled > completed > pending
+    let normalizedStatus = "pending";
+
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10); // "YYYY-MM-DD"
+    const currentHour = now.getHours();
+
+    const startHour = slotStart;
+    const endHour = slotEnd + 1;
+
+    if (statusDoc.isCancel) {
+      normalizedStatus = "cancelled";
+    } else if (statusDoc.isFinal) {
+      normalizedStatus = "completed";
+    } else {
+      if (dateStr < todayStr) {
+        normalizedStatus = "completed";
+      } else if (dateStr > todayStr) {
+        normalizedStatus = "pending";
+      } else {
+        if (currentHour >= endHour) {
+          normalizedStatus = "completed";
+        } else {
+          normalizedStatus = "pending";
+        }
+      }
+    }
+
+    return {
+      id: item._id.toString(),
+      code: booking.code,
+      courtId: court._id?.toString(),
+      courtName: court.name || "Sân",
+      customerName: user.fullName || user.name || "Khách",
+      phone: user.phoneNumber || user.phone || "",
+      startTime,
+      endTime,
+      slotStartIndex: slotStart,
+      slotEndIndex: slotEnd,
+      slotsCount: 1,
+      statusCode: statusDoc.code,
+      statusLabel: statusDoc.label,
+      status: normalizedStatus,
+      bookedAt: dateStr,
+    };
+  });
+
+  return {
+    venue: {
+      id: venue._id.toString(),
+      name: venue.name,
+      address: venue.address,
+    },
+    date: dateStr,
+    availability,
+    bookings: rows,
+  };
+}
+
+
+async function getBookingStatusId(code) {
+  const status = await BookingStatus.findOne({ code }).lean();
+  if (!status) {
+    const err = new Error(`BookingStatus with code=${code} not found`);
+    err.statusCode = 500;
+    throw err;
+  }
+  return status._id;
+}
+
+
+
+export async function cancelUserBooking({ userId, bookingId }) {
+  if (!userId) {
+    const err = new Error("userId is required");
+    err.statusCode = 401;
+    throw err;
+  }
+
+  if (!bookingId) {
+    const err = new Error("bookingId is required");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(bookingId)) {
+    const err = new Error("Invalid bookingId");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const booking = await Booking.findOne({
+    _id: bookingId,
+    user: userId,
+  }).populate("status", "code label isFinal isCancel");
+
+  if (!booking) {
+    const err = new Error("Booking not found");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const currentStatus = booking.status;
+
+  // Đã hủy rồi
+  if (currentStatus?.isCancel) {
+    const err = new Error("Đơn đặt sân đã được hủy trước đó.");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  // Đơn đã hoàn tất / trạng thái cuối không phải hủy => không cho hủy nữa
+  if (currentStatus?.isFinal && !currentStatus?.isCancel) {
+    const err = new Error("Không thể hủy đơn ở trạng thái hiện tại.");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const cancelledStatusId = await getBookingStatusId("CANCELLED");
+
+  booking.status = cancelledStatusId;
+  await booking.save();
+
+  await booking.populate("status", "code label isFinal isCancel");
+
+  return {
+    id: booking._id.toString(),
+    code: booking.code,
+    status: {
+      code: booking.status.code,
+      label: booking.status.label,
+      isFinal: booking.status.isFinal,
+      isCancel: booking.status.isCancel,
+    },
   };
 }

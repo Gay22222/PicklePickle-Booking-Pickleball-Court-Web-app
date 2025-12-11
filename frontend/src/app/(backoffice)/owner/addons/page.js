@@ -4,45 +4,73 @@ import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { apiFetch } from "../../../../lib/apiClient";
 
-// Mock fallback nếu API lỗi / chưa có data
-const FALLBACK_ADDONS = [
-  { id: "water", name: "Nước suối", price: 10000, quantity: 100 },
-  { id: "mineral", name: "Nước khoáng", price: 20000, quantity: 100 },
-  { id: "balls", name: "Bóng Pickleball (3 quả)", price: 280000, quantity: 100 },
-  { id: "racket-rent", name: "Thuê vợt Pickleball", price: 50000, quantity: 100 },
-  { id: "wristband", name: "Băng cổ tay", price: 35000, quantity: 100 },
-  { id: "wet-tissue", name: "Khăn ướt", price: 5000, quantity: 100 },
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE;
+
+// Mapping danh mục
+const CATEGORY_OPTIONS = [
+  { value: "equipment", label: "Dụng cụ" },
+  { value: "drink", label: "Đồ uống" },
+  { value: "support", label: "Phụ trợ" },
+  { value: "other", label: "Khác" },
 ];
 
+function getCategoryLabel(value) {
+  return (
+    CATEGORY_OPTIONS.find((opt) => opt.value === value)?.label || "Phụ trợ"
+  );
+}
+
+// Fallback nếu API lỗi
+const FALLBACK_ADDONS = [
+  { id: "water", name: "Nước suối", price: 10000, stock: 100, category: "drink" },
+  { id: "mineral", name: "Nước khoáng", price: 20000, stock: 100, category: "drink" },
+];
+
+function normalizeAddon(raw) {
+  if (!raw) return null;
+  const category = raw.category || "support";
+
+  return {
+    id: raw.id ?? raw.code ?? raw._id ?? raw.mongoId,
+    mongoId: raw.mongoId ?? raw._id,
+    name: raw.name,
+    price: Number(raw.price ?? 0),
+    stock: Number(raw.stock ?? raw.quantity ?? 0),
+    imageUrl: raw.imageUrl ?? "",
+    category,
+    categoryLabel: raw.categoryLabel || getCategoryLabel(category),
+  };
+}
+
 export default function OwnerAddonsPage() {
-  const [addons, setAddons] = useState(FALLBACK_ADDONS);
+  const [addons, setAddons] = useState(FALLBACK_ADDONS.map(normalizeAddon));
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [search, setSearch] = useState("");
 
-  // ===== VENUES của owner =====
+  // ===== VENUES =====
   const [venues, setVenues] = useState([]);
   const [selectedVenueId, setSelectedVenueId] = useState("");
 
-  // ===== STATE cho popup form (Thêm / Sửa) =====
+  // ===== POPUP FORM =====
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [formMode, setFormMode] = useState("create"); // "create" | "edit"
   const [editingAddon, setEditingAddon] = useState(null);
-
   const [formValues, setFormValues] = useState({
     name: "",
     price: "",
-    quantity: "",
+    stock: "",
     imageFile: null,
     imageName: "",
+    category: "support",
   });
   const [formError, setFormError] = useState("");
 
-  // ===== STATE cho popup xác nhận xoá =====
+  // ===== POPUP DELETE =====
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [deletingAddon, setDeletingAddon] = useState(null);
 
-  // ====== Load danh sách VENUE của owner (pattern từ bookings) ======
+  // ===== Load venues của owner (giống trang bookings) =====
   useEffect(() => {
     let ignore = false;
 
@@ -50,15 +78,10 @@ export default function OwnerAddonsPage() {
       try {
         const res = await apiFetch("/owner/venues");
 
-        // apiFetch có thể trả: array hoặc { data: [...] } hoặc { data: { data: [...] } }
         let venuesData = [];
-        if (Array.isArray(res)) {
-          venuesData = res;
-        } else if (Array.isArray(res?.data)) {
-          venuesData = res.data;
-        } else if (Array.isArray(res?.data?.data)) {
-          venuesData = res.data.data;
-        }
+        if (Array.isArray(res)) venuesData = res;
+        else if (Array.isArray(res?.data)) venuesData = res.data;
+        else if (Array.isArray(res?.data?.data)) venuesData = res.data.data;
 
         if (!ignore) {
           setVenues(venuesData);
@@ -66,22 +89,18 @@ export default function OwnerAddonsPage() {
             setSelectedVenueId((prev) => prev || venuesData[0].id);
           }
         }
-
-        console.log("owner venues res =", res);
-        console.log("venuesData =", venuesData);
       } catch (err) {
         console.error("Load owner venues error:", err);
       }
     }
 
     loadVenues();
-
     return () => {
       ignore = true;
     };
   }, []);
 
-  // ====== Load addons theo venue đã chọn ======
+  // ===== Load addons theo venue =====
   useEffect(() => {
     if (!selectedVenueId) return;
 
@@ -92,20 +111,14 @@ export default function OwnerAddonsPage() {
         setLoading(true);
         setErrorMsg("");
 
-        const res = await apiFetch(`/addons?venueId=${selectedVenueId}`);
-        const json = res || {};
-        const data = json.data || json; // phòng trường hợp apiFetch trả thẳng array
+        const res = await apiFetch(
+          `/owner/venues/${selectedVenueId}/addons`
+        );
+        const data = res?.data ?? res;
 
         if (!cancelled) {
           if (Array.isArray(data) && data.length > 0) {
-            const mapped = data.map((a) => ({
-              id: a.id ?? a.code ?? a._id ?? a.mongoId,
-              mongoId: a.mongoId ?? a._id,
-              name: a.name,
-              price: a.price,
-              quantity: a.defaultQuantity ?? a.quantity ?? 100,
-            }));
-            setAddons(mapped);
+            setAddons(data.map(normalizeAddon));
           } else {
             setAddons([]);
           }
@@ -116,7 +129,7 @@ export default function OwnerAddonsPage() {
           setErrorMsg(
             "Không tải được danh sách phụ kiện từ server. Đang dùng dữ liệu mẫu."
           );
-          setAddons(FALLBACK_ADDONS);
+          setAddons(FALLBACK_ADDONS.map(normalizeAddon));
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -124,29 +137,29 @@ export default function OwnerAddonsPage() {
     }
 
     fetchAddons();
-
     return () => {
       cancelled = true;
     };
   }, [selectedVenueId]);
 
-  // ====== Filter search ======
+  // ===== Search =====
   const filteredAddons = useMemo(() => {
     if (!search.trim()) return addons;
     const keyword = search.toLowerCase();
     return addons.filter((a) => a.name.toLowerCase().includes(keyword));
   }, [addons, search]);
 
-  // ====== HANDLERS: mở popup Thêm / Sửa ======
+  // ===== Form helpers =====
   const openCreateModal = () => {
     setFormMode("create");
     setEditingAddon(null);
     setFormValues({
       name: "",
       price: "",
-      quantity: "",
+      stock: "",
       imageFile: null,
       imageName: "",
+      category: "support",
     });
     setFormError("");
     setIsFormOpen(true);
@@ -158,9 +171,10 @@ export default function OwnerAddonsPage() {
     setFormValues({
       name: addon.name || "",
       price: addon.price?.toString() || "",
-      quantity: addon.quantity?.toString() || "",
+      stock: addon.stock?.toString() || "",
       imageFile: null,
       imageName: "",
+      category: addon.category || "support",
     });
     setFormError("");
     setIsFormOpen(true);
@@ -170,8 +184,8 @@ export default function OwnerAddonsPage() {
     setFormValues((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleImageChange = (event) => {
-    const file = event.target.files?.[0];
+  const handleImageChange = (e) => {
+    const file = e.target.files?.[0];
     if (!file) return;
     setFormValues((prev) => ({
       ...prev,
@@ -181,17 +195,16 @@ export default function OwnerAddonsPage() {
   };
 
   const validateForm = () => {
-    if (!formValues.name.trim()) {
-      return "Tên sản phẩm không được để trống.";
-    }
-    const priceNumber = Number(formValues.price.toString().replace(/,/g, ""));
-    if (!Number.isFinite(priceNumber) || priceNumber < 0) {
+    if (!formValues.name.trim()) return "Tên sản phẩm không được để trống.";
+    const priceNumber = Number(
+      formValues.price.toString().replace(/,/g, "")
+    );
+    if (!Number.isFinite(priceNumber) || priceNumber < 0)
       return "Đơn giá không hợp lệ.";
-    }
-    const quantityNumber = Number(formValues.quantity);
-    if (!Number.isFinite(quantityNumber) || quantityNumber < 0) {
+    const stockNumber = Number(formValues.stock);
+    if (!Number.isFinite(stockNumber) || stockNumber < 0)
       return "Số lượng không hợp lệ.";
-    }
+    if (!formValues.category) return "Vui lòng chọn danh mục.";
     return "";
   };
 
@@ -202,45 +215,103 @@ export default function OwnerAddonsPage() {
       return;
     }
 
-    // Chuyển đổi sang number chuẩn
     const priceNumber = Number(formValues.price.toString().replace(/,/g, ""));
-    const quantityNumber = Number(formValues.quantity);
+    const stockNumber = Number(formValues.stock);
+    const category = formValues.category || "support";
+    const categoryLabel = getCategoryLabel(category);
 
-    if (formMode === "create") {
-      // TODO: Gọi API tạo addon mới
-      // ví dụ: await apiFetch(`/owner/addons`, { method: "POST", body: JSON.stringify({...}) })
+    try {
+      // 1. Upload ảnh nếu có chọn
+      let imageUrl = editingAddon?.imageUrl || "";
 
-      // Tạm thời: update local state cho đẹp UI
-      const newAddon = {
-        id: `temp-${Date.now()}`,
-        name: formValues.name.trim(),
-        price: priceNumber,
-        quantity: quantityNumber,
-      };
-      setAddons((prev) => [...prev, newAddon]);
-    } else if (formMode === "edit" && editingAddon) {
-      // TODO: Gọi API update addon
-      // ví dụ: await apiFetch(`/owner/addons/${editingAddon.mongoId}`, { method: "PUT", body: JSON.stringify({...}) })
+      if (formValues.imageFile) {
+        const token =
+          typeof window !== "undefined"
+            ? localStorage.getItem("pp_token")
+            : null;
 
-      // Tạm thời: update local state
-      setAddons((prev) =>
-        prev.map((item) =>
-          (item.id === editingAddon.id || item.mongoId === editingAddon.mongoId)
-            ? {
-                ...item,
-                name: formValues.name.trim(),
-                price: priceNumber,
-                quantity: quantityNumber,
-              }
-            : item
-        )
-      );
+        const formData = new FormData();
+        formData.append("file", formValues.imageFile);
+
+        const uploadRes = await fetch(
+          `${API_BASE}/owner/venues/${selectedVenueId}/addons/upload-image`,
+          {
+            method: "POST",
+            headers: token
+              ? {
+                  Authorization: `Bearer ${token}`,
+                }
+              : undefined, // để browser tự set Content-Type multipart
+            body: formData,
+          }
+        );
+
+        const uploadJson = await uploadRes.json().catch(() => ({}));
+        if (!uploadRes.ok || !uploadJson.imageUrl) {
+          throw new Error(
+            uploadJson.message || "Upload ảnh thất bại, vui lòng thử lại."
+          );
+        }
+
+        imageUrl = uploadJson.imageUrl;
+      }
+
+      if (!imageUrl) {
+        setFormError("Vui lòng chọn ảnh sản phẩm.");
+        return;
+      }
+
+      // 2. Gọi API tạo / update addon với imageUrl + category
+      if (formMode === "create") {
+        const res = await apiFetch(
+          `/owner/venues/${selectedVenueId}/addons`,
+          {
+            method: "POST",
+            body: {
+              name: formValues.name.trim(),
+              price: priceNumber,
+              stock: stockNumber,
+              imageUrl,
+              category,
+              categoryLabel,
+            },
+          }
+        );
+        const created = normalizeAddon(res?.data ?? res);
+        if (created) setAddons((prev) => [...prev, created]);
+      } else if (formMode === "edit" && editingAddon) {
+        const res = await apiFetch(
+          `/owner/venues/${selectedVenueId}/addons/${editingAddon.mongoId}`,
+          {
+            method: "PUT",
+            body: {
+              name: formValues.name.trim(),
+              price: priceNumber,
+              stock: stockNumber,
+              imageUrl, // cho phép update ảnh luôn
+              category,
+              categoryLabel,
+            },
+          }
+        );
+        const updated = normalizeAddon(res?.data ?? res);
+        if (updated) {
+          setAddons((prev) =>
+            prev.map((item) =>
+              item.mongoId === updated.mongoId ? updated : item
+            )
+          );
+        }
+      }
+
+      setIsFormOpen(false);
+    } catch (e) {
+      console.error("Save addon error", e);
+      setFormError(e.message || "Lưu sản phẩm thất bại. Vui lòng thử lại.");
     }
-
-    setIsFormOpen(false);
   };
 
-  // ====== HANDLERS: popup xác nhận xoá ======
+  // ===== Delete helpers =====
   const openDeleteModal = (addon) => {
     setDeletingAddon(addon);
     setIsDeleteOpen(true);
@@ -248,21 +319,20 @@ export default function OwnerAddonsPage() {
 
   const handleConfirmDelete = async () => {
     if (!deletingAddon) return;
-
-    // TODO: Gọi API xoá addon thực tế
-    // ví dụ: await apiFetch(`/owner/addons/${deletingAddon.mongoId}`, { method: "DELETE" })
-
-    // Tạm thời: xoá trên local state
-    setAddons((prev) =>
-      prev.filter(
-        (item) =>
-          item.id !== deletingAddon.id &&
-          item.mongoId !== deletingAddon.mongoId
-      )
-    );
-
-    setIsDeleteOpen(false);
-    setDeletingAddon(null);
+    try {
+      await apiFetch(
+        `/owner/venues/${selectedVenueId}/addons/${deletingAddon.mongoId}`,
+        { method: "DELETE" }
+      );
+      setAddons((prev) =>
+        prev.filter((item) => item.mongoId !== deletingAddon.mongoId)
+      );
+      setIsDeleteOpen(false);
+      setDeletingAddon(null);
+    } catch (e) {
+      console.error("Delete addon error", e);
+      setIsDeleteOpen(false);
+    }
   };
 
   const handleCancelDelete = () => {
@@ -270,6 +340,7 @@ export default function OwnerAddonsPage() {
     setDeletingAddon(null);
   };
 
+  // ===== Render =====
   return (
     <div className="flex flex-col gap-6">
       {/* Breadcrumb + title */}
@@ -287,14 +358,14 @@ export default function OwnerAddonsPage() {
 
       {/* Card chính */}
       <section className="bg-white rounded-xl shadow-sm border border-gray-100">
-        {/* Header card: title + venue + search + button */}
+        {/* Header card */}
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between px-6 pt-6 pb-4 border-b border-gray-100">
           <h2 className="text-base font-semibold text-gray-900">
             Bảng quản lý sản phẩm bán lẻ
           </h2>
 
           <div className="flex flex-wrap items-center gap-3">
-            {/* Dropdown chọn venue */}
+            {/* Dropdown chọn sân */}
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium text-black">Sân</span>
               <select
@@ -313,7 +384,7 @@ export default function OwnerAddonsPage() {
               </select>
             </div>
 
-            {/* Ô tìm kiếm */}
+            {/* Search */}
             <div className="relative">
               <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2">
                 <Image
@@ -332,7 +403,7 @@ export default function OwnerAddonsPage() {
               />
             </div>
 
-            {/* Nút thêm sản phẩm */}
+            {/* Thêm sản phẩm */}
             <button
               type="button"
               onClick={openCreateModal}
@@ -359,6 +430,9 @@ export default function OwnerAddonsPage() {
                 </th>
                 <th className="py-2.5 px-2 text-left font-medium">Sản phẩm</th>
                 <th className="py-2.5 px-2 text-left w-40 font-medium">
+                  Danh mục
+                </th>
+                <th className="py-2.5 px-2 text-left w-40 font-medium">
                   Đơn giá
                 </th>
                 <th className="py-2.5 px-2 text-left w-32 font-medium">
@@ -375,25 +449,23 @@ export default function OwnerAddonsPage() {
                   key={addon.mongoId || addon.id || index}
                   className="border-b border-gray-100 hover:bg-[#fafafa]"
                 >
-                  {/* STT với vòng tròn đỏ */}
                   <td className="py-2.5 pl-4 pr-2">
                     <div className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#ff4d4f] text-[11px] font-semibold text-white">
                       {index + 1}
                     </div>
                   </td>
-
                   <td className="py-2.5 px-2 text-sm text-gray-900">
                     {addon.name}
                   </td>
-
+                  <td className="py-2.5 px-2 text-sm text-gray-900">
+                    {addon.categoryLabel || getCategoryLabel(addon.category)}
+                  </td>
                   <td className="py-2.5 px-2 text-sm text-gray-900">
                     {addon.price.toLocaleString("vi-VN")}
                   </td>
-
                   <td className="py-2.5 px-2 text-sm text-gray-900">
-                    {addon.quantity}
+                    {addon.stock}
                   </td>
-
                   <td className="py-2.5 px-2 text-sm">
                     <button
                       type="button"
@@ -416,7 +488,7 @@ export default function OwnerAddonsPage() {
               {filteredAddons.length === 0 && !loading && (
                 <tr>
                   <td
-                    colSpan={5}
+                    colSpan={6}
                     className="py-6 text-center text-sm text-gray-500"
                   >
                     Không có sản phẩm nào cho sân này.
@@ -450,7 +522,7 @@ export default function OwnerAddonsPage() {
         </div>
       </section>
 
-      {/* ===== POPUP FORM: Thêm / Sửa sản phẩm ===== */}
+      {/* POPUP FORM */}
       {isFormOpen && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30">
           <div className="w-full max-w-md rounded-2xl bg-white px-8 py-8 shadow-lg border border-gray-200">
@@ -459,7 +531,6 @@ export default function OwnerAddonsPage() {
             </h2>
 
             <div className="space-y-4">
-              {/* Tên sản phẩm */}
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-800">
                   Tên sản phẩm
@@ -474,7 +545,6 @@ export default function OwnerAddonsPage() {
                 />
               </div>
 
-              {/* Đơn giá */}
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-800">
                   Đơn giá
@@ -490,7 +560,6 @@ export default function OwnerAddonsPage() {
                 />
               </div>
 
-              {/* Số lượng */}
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-800">
                   Số lượng
@@ -498,22 +567,40 @@ export default function OwnerAddonsPage() {
                 <input
                   type="number"
                   min="0"
-                  value={formValues.quantity}
+                  value={formValues.stock}
                   onChange={(e) =>
-                    handleFormChange("quantity", e.target.value)
+                    handleFormChange("stock", e.target.value)
                   }
                   className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-black focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500"
                 />
               </div>
 
-              {/* Upload image (mock) */}
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-800">
+                  Danh mục
+                </label>
+                <select
+                  value={formValues.category}
+                  onChange={(e) =>
+                    handleFormChange("category", e.target.value)
+                  }
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-black focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                >
+                  {CATEGORY_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-800">
                   Hình ảnh
                 </label>
                 <div className="flex items-center gap-3">
                   <label className="inline-flex cursor-pointer items-center rounded-md border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
-                    <span>⬆ Upload image</span>
+                    ⬆ Upload image
                     <input
                       type="file"
                       accept="image/*"
@@ -534,7 +621,6 @@ export default function OwnerAddonsPage() {
               )}
             </div>
 
-            {/* Buttons */}
             <div className="mt-7 flex justify-end gap-3">
               <button
                 type="button"
@@ -555,7 +641,7 @@ export default function OwnerAddonsPage() {
         </div>
       )}
 
-      {/* ===== POPUP XÁC NHẬN XOÁ ===== */}
+      {/* POPUP DELETE */}
       {isDeleteOpen && deletingAddon && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30">
           <div className="w-full max-w-sm rounded-2xl bg-white px-6 py-6 shadow-lg border border-gray-200">
@@ -564,9 +650,7 @@ export default function OwnerAddonsPage() {
             </h3>
             <p className="mb-6 text-sm text-gray-700">
               Bạn có chắc chắn muốn xoá{" "}
-              <span className="font-semibold">
-                {deletingAddon.name}
-              </span>{" "}
+              <span className="font-semibold">{deletingAddon.name}</span>{" "}
               khỏi danh sách sản phẩm?
             </p>
             <div className="flex justify-end gap-3">

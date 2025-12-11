@@ -1,9 +1,10 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { apiFetch } from "@/lib/apiClient";
 
 export default function VnpayReturnPage() {
   const searchParams = useSearchParams();
@@ -23,6 +24,22 @@ export default function VnpayReturnPage() {
     amount && !Number.isNaN(Number(amount))
       ? (Number(amount) / 100).toLocaleString("vi-VN")
       : null;
+
+  // Đồng bộ trạng thái thanh toán về backend
+  useEffect(() => {
+    if (!orderId) return;
+
+    apiFetch("/payments/confirm-return", {
+      method: "POST",
+      body: {
+        provider: "VNPAY",
+        orderId,
+        success: isSuccess,
+      },
+    }).catch((err) => {
+      console.error("Sync payment from VNPay return failed:", err);
+    });
+  }, [orderId, isSuccess]);
 
   return (
     <main className="min-h-screen bg-[#f5f7fb] flex flex-col items-center pt-24 px-4 text-gray-900">
@@ -94,7 +111,7 @@ export default function VnpayReturnPage() {
 
           <div className="flex justify-between text-sm mb-2">
             <span className="text-gray-500">Phương thức</span>
-            <span className="font-medium text-gray-800">VNPay QR</span>
+            <span className="font-medium text-gray-800">VNPAY QR</span>
           </div>
 
           <div className="flex justify-between text-sm mt-1">
@@ -129,4 +146,3 @@ export default function VnpayReturnPage() {
     </main>
   );
 }
-

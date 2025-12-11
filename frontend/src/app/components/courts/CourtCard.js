@@ -3,6 +3,17 @@
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "";
+
+function resolveImageUrl(raw) {
+  if (!raw) return "";
+  if (typeof raw !== "string") return "";
+  if (raw.startsWith("/uploads/")) {
+    return `${API_BASE}${raw}`;
+  }
+  return raw;
+}
+
 export default function CourtCard({ court }) {
   const router = useRouter();
   const {
@@ -15,18 +26,29 @@ export default function CourtCard({ court }) {
     timeRange,
     price,
     image,
-  } = court;
+  } = court || {};
+
   const handleViewDetail = () => {
     if (!id) return;
-    router.push(`/courts/${id}`); 
+    router.push(`/courts/${id}`);
   };
+
+  // ===== Logic hiển thị (fallback từ dữ liệu thật) =====
+  const displayImage =
+    resolveImageUrl(image) || "/courts/sample1.png";
+
+  const displayPhone = phone || "Đang cập nhật";
+  const displayAddress = address || "Địa chỉ đang cập nhật";
+  const displayTimeRange = timeRange || "05:00–23:00";
+  const displayPrice =
+    price && price.length > 0 ? price : "Giá đang cập nhật";
 
   return (
     <article className="group flex gap-4 rounded-2xl border border-zinc-200 bg-zinc-100 p-4 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md">
       {/* Ảnh sân */}
       <div className="relative h-[140px] w-[190px] overflow-hidden rounded-xl">
         <Image
-          src={image}
+          src={displayImage}
           alt={name}
           fill
           className="object-cover"
@@ -80,11 +102,11 @@ export default function CourtCard({ court }) {
                 width={12}
                 height={12}
               />
-              <span>Liên hệ: {phone}</span>
+              <span>Liên hệ: {displayPhone}</span>
             </div>
 
             <p className="text-[11px] text-zinc-600 leading-snug">
-              {address}
+              {displayAddress}
             </p>
 
             {/* Thời gian + Giá */}
@@ -97,7 +119,7 @@ export default function CourtCard({ court }) {
                   width={12}
                   height={12}
                 />
-                <span>{timeRange}</span>
+                <span>{displayTimeRange}</span>
               </div>
               <div className="inline-flex items-center gap-1">
                 <Image
@@ -106,7 +128,7 @@ export default function CourtCard({ court }) {
                   width={12}
                   height={12}
                 />
-                <span>Giá: {price}</span>
+                <span>Giá: {displayPrice}</span>
               </div>
             </div>
           </div>
@@ -120,7 +142,6 @@ export default function CourtCard({ court }) {
             className="rounded-md bg-zinc-300 px-4 py-1.5 text-xs font-semibold text-zinc-900 transition hover:bg-zinc-400"
           >
             Xem chi tiết
-            
           </button>
 
           <button

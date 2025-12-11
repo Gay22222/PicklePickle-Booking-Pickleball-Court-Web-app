@@ -5,6 +5,9 @@ import {
   getUserBookingHistoryHandler,
   getOwnerDailyOverviewHandler,
   getOwnerVenuesHandler,
+  getAdminDailyOverviewHandler,
+  getUserBookingDetailHandler,
+  cancelUserBookingHandler,
 } from "./booking.controller.js";
 import { requireAuth } from "../../shared/middlewares/requireAuth.js";
 
@@ -41,5 +44,25 @@ export async function bookingRoutes(app, opts) {
     "/owner/bookings/daily",
     { preHandler: [requireAuth] },
     getOwnerDailyOverviewHandler
+  );
+  // Overview đặt sân trong 1 ngày cho ADMIN (xem mọi sân)
+  app.get(
+    "/admin/bookings/daily",
+    { preHandler: [requireAuth] },
+    getAdminDailyOverviewHandler
+  );
+
+  // Chi tiết 1 booking của user (dùng cho popup hóa đơn)
+  app.get(
+    "/bookings/:bookingId",
+    { onRequest: [requireAuth] },
+    getUserBookingDetailHandler
+  );
+
+  // Hủy 1 booking của user
+  app.post(
+    "/bookings/:bookingId/cancel",
+    { onRequest: [requireAuth] },
+    cancelUserBookingHandler
   );
 }

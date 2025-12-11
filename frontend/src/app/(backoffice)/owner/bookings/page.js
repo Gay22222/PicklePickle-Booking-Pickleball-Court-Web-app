@@ -86,6 +86,24 @@ export default function OwnerBookingsPage() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
+  // Cấu hình khung giờ mở cửa/đóng cửa
+  const [openTime, setOpenTime] = useState("05:00");
+  const [closeTime, setCloseTime] = useState("22:00");
+
+  // Cấu hình giá theo khung giờ
+  const [priceRules, setPriceRules] = useState([
+    { id: 1, startTime: "05:00", endTime: "17:00", price: 120000 },
+    { id: 2, startTime: "17:00", endTime: "22:00", price: 150000 },
+  ]);
+  const [nextRuleId, setNextRuleId] = useState(3);
+
+  // Popup thông báo lưu cấu hình
+  const [configDialog, setConfigDialog] = useState({
+    open: false,
+    type: "success", // "success" | "error"
+    message: "",
+  });
+
   // Set ngày ở client
   useEffect(() => {
     if (!currentDate) {
@@ -136,9 +154,61 @@ export default function OwnerBookingsPage() {
       ignore = true;
     };
     // chỉ load 1 lần khi mount
-    // và khi selectedVenueId đang rỗng, nó sẽ được set trong effect này
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ====== Load CONFIG giờ mở cửa + bảng giá theo venue ======
+  useEffect(() => {
+    if (!selectedVenueId) return;
+
+    let ignore = false;
+
+    async function loadConfig() {
+      try {
+        const res = await apiFetch(`/owner/venues/${selectedVenueId}/config`);
+
+        // Hỗ trợ nhiều kiểu wrapper: { data: {...} } hoặc trả thẳng object
+        const cfg = res?.data ?? res;
+
+        if (ignore || !cfg) return;
+
+        if (cfg.openTime) {
+          setOpenTime(cfg.openTime.slice(0, 5));
+        }
+        if (cfg.closeTime) {
+          setCloseTime(cfg.closeTime.slice(0, 5));
+        }
+
+        if (Array.isArray(cfg.priceRules)) {
+          const mapped = cfg.priceRules.map((r, idx) => ({
+            id: r.id || r._id || idx + 1,
+            startTime: (r.startTime || "").slice(0, 5) || "05:00",
+            endTime: (r.endTime || "").slice(0, 5) || "06:00",
+            // backend có thể trả price hoặc pricePerHour
+            price:
+              typeof r.price === "number"
+                ? r.price
+                : typeof r.pricePerHour === "number"
+                ? r.pricePerHour
+                : 0,
+          }));
+          setPriceRules(mapped);
+          setNextRuleId(mapped.length + 1);
+        } else {
+          setPriceRules([]);
+          setNextRuleId(1);
+        }
+      } catch (err) {
+        console.error("Load venue config error:", err);
+        // nếu lỗi thì giữ nguyên state hiện tại, không popup để tránh phiền
+      }
+    }
+
+    loadConfig();
+
+    return () => {
+      ignore = true;
+    };
+  }, [selectedVenueId]);
 
   // ====== Load bookings + availability theo venue + ngày (có polling) ======
   useEffect(() => {
@@ -176,6 +246,13 @@ export default function OwnerBookingsPage() {
           if (!ignore) {
             setHours(newHours);
             setCourts(newCourts);
+            // Nếu backend có trả openTime/closeTime trong availability thì sync luôn
+            if (data.availability.openTime) {
+              setOpenTime(data.availability.openTime.slice(0, 5));
+            }
+            if (data.availability.closeTime) {
+              setCloseTime(data.availability.closeTime.slice(0, 5));
+            }
           }
         } else {
           if (!ignore) {
@@ -273,6 +350,89 @@ export default function OwnerBookingsPage() {
     setCurrentDate(date);
   };
 
+  // ====== HANDLERS: PRICE RULES & SAVE CONFIG ======
+  const handleAddPriceRule = () => {
+    setPriceRules((prev) => [
+      ...prev,
+      {
+        id: nextRuleId,
+        startTime: "05:00",
+        endTime: "06:00",
+        price: 0,
+      },
+    ]);
+    setNextRuleId((id) => id + 1);
+  };
+
+  const handlePriceRuleChange = (id, field, value) => {
+    setPriceRules((prev) =>
+      prev.map((rule) =>
+        rule.id === id
+          ? {
+              ...rule,
+              [field]:
+                field === "price"
+                  ? value === ""
+                    ? ""
+                    : Number(value) || 0
+                  : value,
+            }
+          : rule
+      )
+    );
+  };
+
+  const handleRemovePriceRule = (id) => {
+    setPriceRules((prev) => prev.filter((rule) => rule.id !== id));
+  };
+
+  const handleSaveConfig = async () => {
+    if (!selectedVenueId) {
+      setConfigDialog({
+        open: true,
+        type: "error",
+        message: "Vui lòng chọn sân cần cấu hình trước.",
+      });
+      return;
+    }
+
+    try {
+      const payload = {
+        openTime,
+        closeTime,
+        priceRules: priceRules.map((r) => ({
+          id: typeof r.id === "string" ? r.id : undefined,
+          startTime: r.startTime,
+          endTime: r.endTime,
+          price: r.price === "" ? 0 : Number(r.price) || 0,
+        })),
+      };
+
+      await apiFetch(`/owner/venues/${selectedVenueId}/config`, {
+        method: "PUT",
+        body: payload,
+      });
+
+      setConfigDialog({
+        open: true,
+        type: "success",
+        message: "Đã lưu cấu hình giờ mở cửa & bảng giá cho sân.",
+      });
+    } catch (err) {
+      console.error("Save venue config error:", err);
+      setConfigDialog({
+        open: true,
+        type: "error",
+        message:
+          err?.message || "Không lưu được cấu hình. Vui lòng thử lại.",
+      });
+    }
+  };
+
+  const closeConfigDialog = () => {
+    setConfigDialog((prev) => ({ ...prev, open: false }));
+  };
+
   return (
     <div className="space-y-6">
       {/* HEADER + FILTER NGÀY + VENUE */}
@@ -330,6 +490,180 @@ export default function OwnerBookingsPage() {
         </div>
       </section>
 
+      {/* CARD: CẤU HÌNH GIỜ & GIÁ THEO SÂN */}
+      <section className="bg-white rounded-xl shadow-sm border border-gray-100 px-6 py-5 space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-900">
+              Cấu hình khung giờ & bảng giá cho sân đang chọn
+            </h2>
+            <p className="text-xs text-gray-500 mt-1">
+              Thiết lập giờ mở cửa, đóng cửa và giá theo từng khung giờ cho{" "}
+              <span className="font-medium">
+                sân trong dropdown phía trên
+              </span>
+              . Cấu hình sẽ được lưu cho từng sân riêng biệt.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-gray-600">
+                Mở cửa
+              </span>
+              <input
+                type="time"
+                value={openTime}
+                onChange={(e) => setOpenTime(e.target.value)}
+                className="w-32 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-sky-500"
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-gray-600">
+                Đóng cửa
+              </span>
+              <input
+                type="time"
+                value={closeTime}
+                onChange={(e) => setCloseTime(e.target.value)}
+                className="w-32 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-sky-500"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={handleSaveConfig}
+              className="inline-flex items-center justify-center rounded-xl bg-sky-500 px-4 h-9 text-xs font-semibold text-white shadow hover:bg-sky-600 transition"
+            >
+              Lưu cấu hình
+            </button>
+          </div>
+        </div>
+
+        {/* Bảng giá theo khung giờ */}
+        <div className="border-t border-gray-100 pt-4">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-semibold text-gray-900">
+              Bảng giá theo khung giờ
+            </p>
+            <button
+              type="button"
+              onClick={handleAddPriceRule}
+              className="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white px-3 h-8 text-[11px] font-medium text-gray-800 hover:bg-gray-50"
+            >
+              + Thêm khung giờ
+            </button>
+          </div>
+
+          {priceRules.length === 0 ? (
+            <p className="text-xs text-gray-500">
+              Chưa có khung giờ nào. Nhấn &quot;+ Thêm khung giờ&quot; để bắt
+              đầu cấu hình giá.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-xs">
+                <thead>
+                  <tr className="bg-gray-50 text-gray-700">
+                    <th className="px-3 py-2 text-left font-medium border-b border-gray-100">
+                      STT
+                    </th>
+                    <th className="px-3 py-2 text-left font-medium border-b border-gray-100">
+                      Bắt đầu
+                    </th>
+                    <th className="px-3 py-2 text-left font-medium border-b border-gray-100">
+                      Kết thúc
+                    </th>
+                    <th className="px-3 py-2 text-left font-medium border-b border-gray-100">
+                      Đơn giá (VND)
+                    </th>
+                    <th className="px-3 py-2 text-center font-medium border-b border-gray-100">
+                      Hành động
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {priceRules.map((rule, index) => (
+                    <tr
+                      key={rule.id}
+                      className={index % 2 === 0 ? "bg-white" : "bg-gray-50/70"}
+                    >
+                      <td className="px-3 py-2 border-b border-gray-100 text-gray-800">
+                        {index + 1}
+                      </td>
+
+                      <td className="px-3 py-2 border-b border-gray-100">
+                        <input
+                          type="time"
+                          value={rule.startTime}
+                          onChange={(e) =>
+                            handlePriceRuleChange(
+                              rule.id,
+                              "startTime",
+                              e.target.value
+                            )
+                          }
+                          className="w-32 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                        />
+                      </td>
+                      <td className="px-3 py-2 border-b border-gray-100">
+                        <input
+                          type="time"
+                          value={rule.endTime}
+                          onChange={(e) =>
+                            handlePriceRuleChange(
+                              rule.id,
+                              "endTime",
+                              e.target.value
+                            )
+                          }
+                          className="w-32 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                        />
+                      </td>
+                      <td className="px-3 py-2 border-b border-gray-100">
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            min={0}
+                            value={rule.price}
+                            onChange={(e) =>
+                              handlePriceRuleChange(
+                                rule.id,
+                                "price",
+                                e.target.value
+                              )
+                            }
+                            className="w-32 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                          />
+                          <span className="text-[11px] text-gray-500">
+                            /giờ
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 border-b border-gray-100 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleRemovePriceRule(rule.id)}
+                          className="text-[11px] font-medium text-red-500 hover:text-red-600"
+                        >
+                          Xoá
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <p className="mt-2 text-[11px] text-gray-500">
+            Gợi ý: chia theo 2–3 khung giờ (ví dụ 05:00–17:00, 17:00–22:00) để
+            dễ quản lý.
+          </p>
+        </div>
+      </section>
+
       {/* CARD: SÂN TRONG NGÀY */}
       <section className="bg-white rounded-xl shadow-sm border border-gray-100 px-6 py-5 space-y-5">
         <div className="flex items-center justify-between">
@@ -337,7 +671,9 @@ export default function OwnerBookingsPage() {
             Chi tiết sân trong ngày
           </h2>
           <p className="text-xs text-gray-500">
-            {loading ? "Đang tải dữ liệu..." : "Khung giờ hiển thị: 05:00 – 22:00"}
+            {loading
+              ? "Đang tải dữ liệu..."
+              : "Khung giờ hiển thị: 05:00 – 22:00"}
           </p>
         </div>
 
@@ -579,6 +915,45 @@ export default function OwnerBookingsPage() {
           </p>
         </div>
       </section>
+
+      {/* POPUP THÔNG BÁO LƯU CẤU HÌNH */}
+      {configDialog.open && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-xl px-6 py-5 w-[320px]">
+            <div className="flex items-start gap-3">
+              <div
+                className={`mt-1 flex h-8 w-8 items-center justify-center rounded-full ${
+                  configDialog.type === "success"
+                    ? "bg-emerald-100 text-emerald-600"
+                    : "bg-red-100 text-red-600"
+                }`}
+              >
+                {configDialog.type === "success" ? "✓" : "!"}
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900 mb-1">
+                  {configDialog.type === "success"
+                    ? "Lưu cấu hình thành công"
+                    : "Lưu cấu hình thất bại"}
+                </h3>
+                <p className="text-xs text-gray-600">
+                  {configDialog.message}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={closeConfigDialog}
+                className="inline-flex items-center justify-center rounded-xl bg-sky-500 px-4 h-9 text-xs font-semibold text-white hover:bg-sky-600 transition"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

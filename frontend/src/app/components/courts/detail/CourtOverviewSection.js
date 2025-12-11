@@ -2,6 +2,18 @@
 
 import Image from "next/image";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE;
+
+function resolveImageUrl(raw) {
+  if (!raw) return "";
+  if (typeof raw !== "string") return "";
+  if (raw.startsWith("/uploads/")) {
+    return `${API_BASE}${raw}`;
+  }
+  return raw;
+}
+
+
 export default function CourtOverviewSection({ overview }) {
   const {
     featureLeft = [
@@ -77,16 +89,16 @@ export default function CourtOverviewSection({ overview }) {
               key={`${src}-${idx}`}
               className="relative w-full overflow-hidden rounded-lg aspect-[3/4]"
             >
-              <Image
-                src={src}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={resolveImageUrl(src)}
                 alt="Feature"
-                fill
-                className="object-cover"
-                sizes="(min-width: 768px) 120px, 50vw"
+                className="h-full w-full object-cover"
               />
             </div>
           ))}
         </div>
+
       </div>
 
       {/* Tiện ích */}
@@ -119,16 +131,16 @@ export default function CourtOverviewSection({ overview }) {
               key={`${src}-${idx}`}
               className="relative w-full overflow-hidden rounded-lg aspect-[3/4]"
             >
-              <Image
-                src={src}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={resolveImageUrl(src)}
                 alt="Amenity"
-                fill
-                className="object-cover"
-                sizes="(min-width: 768px) 120px, 50vw"
+                className="h-full w-full object-cover"
               />
             </div>
           ))}
         </div>
+
       </div>
     </section>
   );

@@ -39,9 +39,24 @@ const userSchema = new Schema(
       type: Date,
       default: null,
     },
+
+    // Đánh dấu admin gốc (leader) – chỉ có ý nghĩa khi user có role ADMIN
+    isAdminLeader: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    // Có quyền quản lý admin (truy cập màn hình quản lý admin)
+    canManageAdmins: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
   },
   { timestamps: true }
 );
+
+userSchema.index({ email: 1 });
 
 export const User =
   mongoose.models.User || mongoose.model("User", userSchema);

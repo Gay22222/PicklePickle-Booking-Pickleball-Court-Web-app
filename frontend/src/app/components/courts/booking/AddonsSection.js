@@ -62,7 +62,7 @@ const FALLBACK_PRODUCTS = [
   },
 ];
 
-export default function AddonsSection({ onChange }) {
+export default function AddonsSection({ onChange, venueId }) {
   const [activeTab, setActiveTab] = useState("all");
   const [quantities, setQuantities] = useState({}); // { productId: number }
 
@@ -70,7 +70,7 @@ export default function AddonsSection({ onChange }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // ===== Fetch addons từ backend =====
+  // ===== Fetch addons từ backend, filter theo venueId =====
   useEffect(() => {
     let cancelled = false;
 
@@ -79,9 +79,14 @@ export default function AddonsSection({ onChange }) {
         setLoading(true);
         setError("");
 
-        const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_BASE}/addons`
-        );
+        // /addons?venueId=...
+        const base = `${process.env.NEXT_PUBLIC_API_BASE}/addons`;
+        const url =
+          venueId && typeof venueId === "string"
+            ? `${base}?venueId=${encodeURIComponent(venueId)}`
+            : base;
+
+        const res = await fetch(url);
 
         if (!res.ok) {
           throw new Error(`Fetch addons failed: ${res.status}`);
@@ -93,6 +98,8 @@ export default function AddonsSection({ onChange }) {
         if (!cancelled && data.length > 0) {
           // data: [{ id, name, category, categoryLabel, price, image }]
           setProducts(data);
+          // reset quantity mỗi lần đổi venue
+          setQuantities({});
         }
       } catch (err) {
         console.error("Could not load addons", err);
@@ -111,7 +118,7 @@ export default function AddonsSection({ onChange }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [venueId]);
 
   // ===== Tính tổng tiền & emit ra ngoài =====
   useEffect(() => {
@@ -129,7 +136,7 @@ export default function AddonsSection({ onChange }) {
           name: product.name,
           price: product.price,
           quantity: qty,
-          lineTotal,             // tên cũ
+          lineTotal, // tên cũ
           totalPrice: lineTotal, // alias để payment dùng
           category: product.category,
           categoryLabel: product.categoryLabel,
@@ -176,6 +183,15 @@ export default function AddonsSection({ onChange }) {
     });
   };
 
+  // Chuẩn hoá src ảnh: nếu là /uploads/... -> prefix API_BASE
+  const resolveImageSrc = (raw) => {
+    if (!raw) return "/booking/water.svg"; // fallback
+    if (raw.startsWith("/uploads/")) {
+      return `${process.env.NEXT_PUBLIC_API_BASE}${raw}`;
+    }
+    return raw; // các icon tĩnh trong /public/booking
+  };
+
   return (
     <section className="rounded-3xl border border-zinc-200 bg-white px-4 py-5 md:px-8 md:py-6 space-y-5">
       <h2 className="text-lg md:text-xl font-semibold text-black mb-1">
@@ -198,11 +214,10 @@ export default function AddonsSection({ onChange }) {
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
-              className={`rounded-full px-4 py-2 text-sm font-medium transition ${
-                isActive
+              className={`rounded-full px-4 py-2 text-sm font-medium transition ${isActive
                   ? "bg-black text-white"
                   : "bg-[#e9eaed] text-black hover:bg-[#dcdde1]"
-              }`}
+                }`}
             >
               {tab.label}
             </button>
@@ -222,15 +237,17 @@ export default function AddonsSection({ onChange }) {
             >
               {/* left: image + text */}
               <div className="flex items-center gap-3">
-                <div className="h-14 w-14 flex items-center justify-center rounded-full bg-white overflow-hidden">
+                <div className="h-14 w-14 relative rounded-full bg-white overflow-hidden flex-shrink-0">
                   <Image
-                    src={product.image}
+                    src={resolveImageSrc(product.image)}
                     alt={product.name}
-                    width={56}
-                    height={56}
-                    className="object-contain"
+                    fill  // dùng fill để ảnh phủ toàn bộ khung tròn
+                    sizes="56px"
+                    className="object-cover"  // crop như avatar, không bị khoảng trắng
+                    unoptimized
                   />
                 </div>
+
                 <div className="space-y-1">
                   <p className="text-sm font-semibold text-black">
                     {product.name}

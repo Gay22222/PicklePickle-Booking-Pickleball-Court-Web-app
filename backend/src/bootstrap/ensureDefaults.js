@@ -107,37 +107,63 @@ async function ensurePaymentStatuses() {
 }
 
 async function ensureDefaultAccounts() {
-  // ---- 1) ADMIN ----
-  let admin = await User.findOne({ email: "admin@example.com" });
+  // ---- 1) ADMIN GỐC (LEADER) ----
+  let admin = await User.findOne({ email: "admin@admin.com" });
 
   if (!admin) {
     admin = await User.create({
-      email: "admin@example.com",
+      email: "admin@admin.com",
       fullName: "System Administrator",
       phone: "0999999999",
       isActive: true,
       emailVerified: true,
       passwordHash: await hashPassword("admin"),
+      isAdminLeader: true,
+      canManageAdmins: true,
     });
-
-    const adminRole = await Role.findOne({ code: "ADMIN" });
-
-    await UserRole.create({
-      user: admin._id,
-      role: adminRole._id,
-    });
-
     console.log("Default admin created");
   } else {
-    console.log("Default admin already exists");
+    // Đảm bảo admin seed luôn là leader + có quyền manage admin
+    let changed = false;
+    if (!admin.isAdminLeader) {
+      admin.isAdminLeader = true;
+      changed = true;
+    }
+    if (!admin.canManageAdmins) {
+      admin.canManageAdmins = true;
+      changed = true;
+    }
+    if (!admin.isActive) {
+      admin.isActive = true;
+      changed = true;
+    }
+    if (!admin.emailVerified) {
+      admin.emailVerified = true;
+      changed = true;
+    }
+    if (changed) {
+      await admin.save();
+      console.log("Default admin updated with leader/admin flags");
+    } else {
+      console.log("Default admin already exists");
+    }
+  }
+
+  const adminRole = await Role.findOne({ code: "ADMIN" });
+  if (adminRole) {
+    await UserRole.updateOne(
+      { user: admin._id, role: adminRole._id },
+      { user: admin._id, role: adminRole._id },
+      { upsert: true }
+    );
   }
 
   // ---- 2) OWNER ----
-  let owner = await User.findOne({ email: "owner@example.com" });
+  let owner = await User.findOne({ email: "owner@owner.com" });
 
   if (!owner) {
     owner = await User.create({
-      email: "owner@example.com",
+      email: "owner@owner.com",
       fullName: "Default Court Owner",
       phone: "0888888888",
       isActive: true,

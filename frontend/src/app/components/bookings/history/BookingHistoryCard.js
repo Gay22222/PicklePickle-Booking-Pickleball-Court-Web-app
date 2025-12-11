@@ -1,20 +1,53 @@
 import Image from "next/image";
 import BookingStatusBadge from "./BookingStatusBadge";
 
-export default function BookingHistoryCard({ booking }) {
+export default function BookingHistoryCard({
+  booking,
+  onViewDetail,
+  onCancel,
+}) {
   const {
     courtName,
     courtCode,
     date,
     startTime,
     endTime,
-    status,        // <-- thêm
-    statusLabel,   // <-- đã có
+    status, // có thể undefined với dữ liệu mock
+    statusLabel,
     rating,
     reviews,
     imageUrl,
     isFavorite,
   } = booking;
+
+  // Sau này nếu BE có status rõ hơn, chỉ việc update điều kiện ở đây
+  const statusLower = (status || "").toString().toLowerCase();
+  const labelLower = (statusLabel || "").toString().toLowerCase();
+
+  const isAlreadyCancelled =
+    statusLower.includes("cancel") ||
+    labelLower.includes("hủy") ||
+    labelLower.includes("huỷ");
+
+  const isFinished =
+    statusLower.includes("done") ||
+    statusLower.includes("completed") ||
+    labelLower.includes("xong");
+
+  const canCancel = !isAlreadyCancelled && !isFinished;
+
+  const handleViewDetailClick = () => {
+    if (onViewDetail) {
+      onViewDetail(booking);
+    }
+  };
+
+  const handleCancelClick = () => {
+    if (!canCancel) return;
+    if (onCancel) {
+      onCancel(booking);
+    }
+  };
 
   return (
     <article className="flex w-full rounded-[16px] bg-[#f5f5f5] border border-[#e5e5e5] overflow-hidden">
@@ -108,7 +141,7 @@ export default function BookingHistoryCard({ booking }) {
 
         {/* Khối phải */}
         <div className="flex flex-col justify-between items-end min-w-[140px]">
-          {/* Rating + reviews */}
+          {/* Rating + reviews (tổng quan) */}
           <div className="flex flex-col items-end gap-1">
             <div className="flex items-center gap-2">
               <div className="flex items-center justify-center w-8 h-5 rounded-full bg-[#6b6b6b] text-[11px] text-white">
@@ -123,13 +156,21 @@ export default function BookingHistoryCard({ booking }) {
           <div className="flex items-center gap-2">
             <button
               type="button"
+              onClick={handleViewDetailClick}
               className="px-4 py-[6px] rounded-[30px] border border-[#c4c4c4] text-[11px] text-[#333] bg-[#f7f7f7] hover:bg-[#ebebeb] transition"
             >
               Chi tiết
             </button>
+
             <button
               type="button"
-              className="px-4 py-[6px] rounded-[30px] border border-[#c4c4c4] text-[11px] text-[#333] bg-white hover:bg-[#f0f0f0] transition"
+              onClick={handleCancelClick}
+              disabled={!canCancel}
+              className={`px-4 py-[6px] rounded-[30px] border border-[#c4c4c4] text-[11px] bg-white transition ${
+                canCancel
+                  ? "text-[#333] hover:bg-[#f0f0f0]"
+                  : "text-[#999] cursor-not-allowed bg-[#f9f9f9]"
+              }`}
             >
               Hủy sân
             </button>

@@ -12,25 +12,52 @@ export default function SearchResultsGrid({
 }) {
   // Map venue -> court object cho CourtCard
   const mappedCourts = (venues ?? []).map((v) => {
-    const primaryImage =
-      (v.images || []).find((img) => img.isPrimary) ||
-      (v.images || [])[0];
+    const images = Array.isArray(v.images) ? v.images : [];
+
+    const primaryImageDoc =
+      images.find((img) => img.isPrimary) || images[0];
+
+    // Ưu tiên avatarImage, sau đó tới ảnh primary, cuối cùng là mock
+    const rawImage =
+      v.avatarImage ||
+      primaryImageDoc?.url ||
+      "/courts/sample1.png";
+
+    // Ưu tiên heroPhone / heroAddress nếu có
+    const phone = v.heroPhone || v.phone || "";
+    const address = v.heroAddress || v.address || "";
+
+    // Lấy giờ mở / đóng nếu BE có trả về, fallback mặc định
+    const openTimeRaw = v.openTime || v.openHour || "05:00";
+    const closeTimeRaw = v.closeTime || v.closeHour || "23:00";
+
+    const openTime = (openTimeRaw || "").slice(0, 5);
+    const closeTime = (closeTimeRaw || "").slice(0, 5);
+
+    const timeRange = `${openTime}–${closeTime}`;
+
+    const basePrice =
+      typeof v.basePricePerHour === "number"
+        ? v.basePricePerHour
+        : 0;
+
+    const price =
+      basePrice > 0
+        ? `${basePrice.toLocaleString("vi-VN")}đ/giờ`
+        : "";
 
     return {
-      id: v._id,
+      id: v.id || v._id,
       name: v.name,
       rating: v.rating ?? 4.5,
       reviews: v.reviewCount ?? 0,
-      phone: v.phone ?? "",
-      address: v.address,
-      timeRange: "06:00–23:00", // sau này lấy từ open-hours
-      price: v.basePricePerHour
-        ? `${v.basePricePerHour.toLocaleString("vi-VN")}đ/giờ`
-        : "",
-      image: primaryImage?.url || "/courts/sample1.png",
+      phone,
+      address,
+      timeRange,
+      price,
+      image: rawImage,
     };
   });
-
 
   const mid = Math.ceil(mappedCourts.length / 2);
   const leftColumn = mappedCourts.slice(0, mid);
@@ -39,7 +66,9 @@ export default function SearchResultsGrid({
   return (
     <div>
       {loading && (
-        <p className="mb-2 text-sm text-zinc-500">Đang tải danh sách sân...</p>
+        <p className="mb-2 text-sm text-zinc-500">
+          Đang tải danh sách sân...
+        </p>
       )}
 
       {/* GRID 2 CỘT */}
@@ -49,11 +78,13 @@ export default function SearchResultsGrid({
             {leftColumn.map((court) => (
               <CourtCard key={court.id} court={court} />
             ))}
-            {!loading && leftColumn.length === 0 && rightColumn.length === 0 && (
-              <p className="text-xs text-zinc-500">
-                Không tìm thấy sân phù hợp.
-              </p>
-            )}
+            {!loading &&
+              leftColumn.length === 0 &&
+              rightColumn.length === 0 && (
+                <p className="text-xs text-zinc-500">
+                  Không tìm thấy sân phù hợp.
+                </p>
+              )}
           </div>
         </div>
 

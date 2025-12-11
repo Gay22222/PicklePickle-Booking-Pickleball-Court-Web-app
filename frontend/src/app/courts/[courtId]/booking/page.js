@@ -4,11 +4,10 @@ import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Image from "next/image";
 
-// ====== THÊM 2 CONST NÀY ======
 const TOKEN_STORAGE_KEY = "pp_token";
 const PAYMENT_DRAFT_KEY = "pp_booking_payment_draft";
 
-// Default list giờ 05:00 -> 22:00 (dùng khi chưa có data từ API)
+// 05:00 -> 22:00
 const DEFAULT_HOURS = Array.from({ length: 18 }, (_, idx) => {
   const hour = 5 + idx;
   return `${hour.toString().padStart(2, "0")}:00`;
@@ -16,10 +15,9 @@ const DEFAULT_HOURS = Array.from({ length: 18 }, (_, idx) => {
 
 export default function CourtBookingTimePage() {
   const params = useParams();
-  const courtId = params?.courtId; // thực chất là venueId
+  const courtId = params?.courtId; // venueId
   const router = useRouter();
 
-  // ===== Venue name cho title =====
   const [venueName, setVenueName] = useState("");
 
   useEffect(() => {
@@ -54,12 +52,9 @@ export default function CourtBookingTimePage() {
     };
   }, [courtId]);
 
-  // Ngày hiện tại (Date object)
   const [currentDate, setCurrentDate] = useState(() => new Date());
-  // Slots đang chọn: ["Sân 1-05:00", ...]
   const [selectedSlots, setSelectedSlots] = useState([]);
 
-  // Availability từ backend
   const [availability, setAvailability] = useState(null);
   const [loadingAvail, setLoadingAvail] = useState(false);
   const [errorAvail, setErrorAvail] = useState("");
@@ -67,7 +62,7 @@ export default function CourtBookingTimePage() {
   const displayDate = currentDate.toLocaleDateString("vi-VN");
   const dateParam = currentDate.toISOString().slice(0, 10); // YYYY-MM-DD
 
-  // ===== Fetch availability (poll mỗi 10s) =====
+  // ===== Fetch availability (poll 10s) =====
   useEffect(() => {
     if (!courtId) return;
 
@@ -94,7 +89,7 @@ export default function CourtBookingTimePage() {
 
         setAvailability(data);
 
-        // Sau khi có availability mới, loại bỏ các slot đã bị khóa (không còn available)
+        // Sau khi có availability mới, loại bỏ các slot đã bị khoá
         if (data && Array.isArray(data.courts)) {
           const availableKeySet = new Set();
 
@@ -102,7 +97,7 @@ export default function CourtBookingTimePage() {
             const label = `Sân ${courtIndex + 1}`;
             (court.slots || []).forEach((slot) => {
               if (slot.status === "available") {
-                const hour = (slot.timeFrom || "").slice(0, 5); // "HH:MM"
+                const hour = (slot.timeFrom || "").slice(0, 5);
                 const key = `${label}-${hour}`;
                 availableKeySet.add(key);
               }
@@ -122,9 +117,7 @@ export default function CourtBookingTimePage() {
       }
     };
 
-    // gọi lần đầu
     fetchAvailability();
-    // poll mỗi 10s
     intervalId = setInterval(fetchAvailability, 10000);
 
     return () => {
@@ -150,13 +143,11 @@ export default function CourtBookingTimePage() {
     });
   };
 
-  // ===== Data hiển thị grid =====
   const hasAvailability =
     availability &&
     Array.isArray(availability.courts) &&
     availability.courts.length > 0;
 
-  // Header hours: ưu tiên từ API, fallback default
   const headerSlots = hasAvailability
     ? availability.courts[0].slots || []
     : [];
@@ -165,27 +156,30 @@ export default function CourtBookingTimePage() {
       ? headerSlots.map((s) => (s.timeFrom || "").slice(0, 5))
       : DEFAULT_HOURS;
 
-  // Mỗi row sân
   const courtsRows = hasAvailability
     ? availability.courts.map((c, index) => ({
-      label: `Sân ${index + 1}`, // giữ format cho addons: "Sân X"
-      courtName: c.courtName,
-      slots: c.slots || [],
-    }))
+        label: `Sân ${index + 1}`,
+        courtName: c.courtName,
+        slots: c.slots || [],
+      }))
     : Array.from({ length: 3 }, (_, idx) => ({
-      label: `Sân ${idx + 1}`,
-      courtName: `Sân ${idx + 1}`,
-      slots: [],
-    }));
+        label: `Sân ${idx + 1}`,
+        courtName: `Sân ${idx + 1}`,
+        slots: [],
+      }));
 
   // ===== Chọn / bỏ chọn slot =====
   const toggleSlot = (rowIndex, colIndex) => {
     const row = courtsRows[rowIndex];
-    const hour = HOURS[colIndex]; // "HH:MM"
+    const hour = HOURS[colIndex];
     const key = `${row.label}-${hour}`;
 
     const slot = row.slots?.[colIndex];
-    const status = slot?.status ?? "available";
+
+    // KHÔNG có slot thực, không cho chọn (tránh chọn "ô ma")
+    if (!slot) return;
+
+    const status = slot.status ?? "available";
     if (status !== "available") return;
 
     setSelectedSlots((prev) => {
@@ -196,7 +190,7 @@ export default function CourtBookingTimePage() {
     });
   };
 
-  // ===== Helper: lấy giá 1 slot theo key "Sân X-HH:MM" =====
+  // ===== Helper tính giá 1 slot =====
   const getSlotPriceByKey = (key) => {
     const [label, hour] = key.split("-");
     const rowIndex = courtsRows.findIndex((row) => row.label === label);
@@ -208,21 +202,24 @@ export default function CourtBookingTimePage() {
     const slot = courtsRows[rowIndex].slots?.[colIndex];
     if (!slot) return 0;
 
-    // Backend nên trả pricePerHour trong availability
-    return slot.pricePerHour || slot.walkinPrice || slot.fixedPrice || 0;
+    const price =
+      slot.pricePerHour ??
+      slot.walkinPrice ??
+      slot.fixedPrice ??
+      0;
+
+    return typeof price === "number" ? price : 0;
   };
 
-  // ===== Tổng tiền dựa trên giá từng slot =====
   const totalPrice = selectedSlots.reduce(
     (sum, key) => sum + getSlotPriceByKey(key),
     0
   );
 
-  // ===== SUBMIT: tạo booking + lưu bookingId + sang addons =====
+  // ===== SUBMIT =====
   const handleSubmit = async () => {
     if (selectedSlots.length === 0) return;
 
-    // 1. Lấy token
     let token = null;
     if (typeof window !== "undefined") {
       token = localStorage.getItem(TOKEN_STORAGE_KEY);
@@ -236,28 +233,31 @@ export default function CourtBookingTimePage() {
       return;
     }
 
-    // 2. Build map từ key "Sân 1-10:00" -> { courtId, slotIndex }
     if (!availability || !Array.isArray(availability.courts)) {
       alert("Không có dữ liệu sân để tạo booking. Vui lòng tải lại trang.");
       return;
     }
 
+    // Build slotMap BÁM THEO GRID: (rowIndex, slotIdx) + HOURS
     const slotMap = new Map();
 
-    availability.courts.forEach((c, index) => {
-      const label = `Sân ${index + 1}`;
-      const slots = c.slots || [];
-      slots.forEach((slot) => {
-        const timeLabel = (slot.timeFrom || "").slice(0, 5); // "HH:MM"
-        const key = `${label}-${timeLabel}`;
+    availability.courts.forEach((court, rowIndex) => {
+      const label = `Sân ${rowIndex + 1}`;
+      const slots = court.slots || [];
+
+      slots.forEach((slot, slotIdx) => {
+        const hour =
+          HOURS[slotIdx] || (slot.timeFrom || "").slice(0, 5);
+        const key = `${label}-${hour}`;
+
         slotMap.set(key, {
-          courtId: c.courtId,          // từ getVenueAvailability
-          slotIndex: slot.slotIndex,   // integer 5..22
+          courtId: court.courtId,
+          slotIndex: slot.slotIndex,
         });
       });
     });
 
-    // 3. Gom slotIndices theo courtId
+    // Gom lại theo courtId
     const courtsById = new Map();
 
     selectedSlots.forEach((key) => {
@@ -274,7 +274,6 @@ export default function CourtBookingTimePage() {
     const courtsPayload = Array.from(courtsById.entries()).map(
       ([cid, indices]) => ({
         courtId: cid,
-        // loại trùng + sort tăng dần
         slotIndices: Array.from(new Set(indices)).sort((a, b) => a - b),
       })
     );
@@ -286,7 +285,6 @@ export default function CourtBookingTimePage() {
 
     console.log("courtsPayload gửi backend =", courtsPayload);
 
-    // 4. Gọi API /bookings
     try {
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_API_BASE}/bookings`,
@@ -297,9 +295,9 @@ export default function CourtBookingTimePage() {
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
-            venueId: courtId,      // param này thực ra là venueId
-            date: dateParam,       // "YYYY-MM-DD"
-            courts: courtsPayload, // chuẩn format backend
+            venueId: courtId,
+            date: dateParam,
+            courts: courtsPayload,
           }),
         }
       );
@@ -323,17 +321,15 @@ export default function CourtBookingTimePage() {
         return;
       }
 
-      // 5. Lưu draft cho bước addons/payment
       if (typeof window !== "undefined") {
         const draft = {
           bookingId,
-          courtTotal: totalPrice,   // số tiền sân FE tính để show invoice
+          courtTotal: totalPrice,
           addons: { items: [] },
         };
         localStorage.setItem(PAYMENT_DRAFT_KEY, JSON.stringify(draft));
       }
 
-      // 6. Chuyển sang bước addons
       const slotsParam = selectedSlots.join(",");
       router.push(
         `/courts/${courtId}/booking/addons?date=${encodeURIComponent(
@@ -346,18 +342,15 @@ export default function CourtBookingTimePage() {
     }
   };
 
-
   const titleVenue = venueName || "PicklePickle";
 
   return (
     <main className="min-h-screen bg-[#f5f7fb]">
       <section className="mx-auto max-w-6xl px-4 py-10 space-y-8">
-        {/* TITLE */}
         <h1 className="text-center text-2xl md:text-3xl font-semibold text-black">
           Tình trạng đặt sân {titleVenue}
         </h1>
 
-        {/* INFO LOADING / ERROR */}
         {loadingAvail && (
           <p className="text-center text-xs text-zinc-500">
             Đang tải tình trạng sân...
@@ -367,7 +360,6 @@ export default function CourtBookingTimePage() {
           <p className="text-center text-xs text-red-500">{errorAvail}</p>
         )}
 
-        {/* CARD */}
         <div className="rounded-3xl bg-[#f7f7f7] border border-[#e5e5e5] px-6 py-7 md:px-10 md:py-8 space-y-6">
           {/* DATE + ARROWS */}
           <div className="flex items-center justify-center gap-6 text-sm font-medium text-black">
@@ -410,11 +402,10 @@ export default function CourtBookingTimePage() {
             <LegendItem colorClass="bg-[#7fd321]" label="Đang chọn" />
           </div>
 
-          {/* TIME GRID */}
+          {/* GRID */}
           <div className="rounded-3xl bg-white border border-[#e5e5e5] px-4 py-5">
             <div className="overflow-x-auto">
               <div className="min-w-[900px]">
-                {/* header row */}
                 <div className="grid grid-cols-[90px_repeat(18,minmax(0,1fr))] gap-1 text-[11px] text-center text-black mb-2">
                   <div />
                   {HOURS.map((h) => (
@@ -422,7 +413,6 @@ export default function CourtBookingTimePage() {
                   ))}
                 </div>
 
-                {/* court rows */}
                 <div className="space-y-1">
                   {courtsRows.map((row, rowIndex) => (
                     <div
@@ -446,11 +436,13 @@ export default function CourtBookingTimePage() {
                         if (isBooked) bg = "bg-[#ffe94d]";
                         if (isSelected) bg = "bg-[#7fd321]";
 
+                        const isClickable = !!slot && !isBooked;
+
                         return (
                           <button
                             key={key}
                             type="button"
-                            disabled={isBooked}
+                            disabled={!isClickable}
                             onClick={() => toggleSlot(rowIndex, colIndex)}
                             className={`h-7 rounded-[6px] border border-[#dcdcdc] ${bg} transition hover:border-[#b3b3b3] disabled:cursor-not-allowed`}
                           />
@@ -462,14 +454,12 @@ export default function CourtBookingTimePage() {
               </div>
             </div>
 
-            {/* TOTAL PRICE */}
             <div className="mt-4 flex justify-end text-sm md:text-base font-semibold text-black">
               Tổng tiền:&nbsp;
               <span>{totalPrice.toLocaleString("vi-VN")} đ</span>
             </div>
           </div>
 
-          {/* CTA BUTTON */}
           <div className="flex justify-center pt-2">
             <button
               type="button"

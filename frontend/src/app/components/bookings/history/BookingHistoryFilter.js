@@ -12,11 +12,7 @@ export default function BookingHistoryFilter({ sort, onChangeSort }) {
         <select
           value={sort}
           onChange={(e) => onChangeSort(e.target.value)}
-          className="
-            absolute inset-0 w-full h-full
-            opacity-0 cursor-pointer
-            text-[12px] text-black
-          "
+          className=" absolute inset-0 w-full h-full opacity-0 cursor-pointer text-[12px] text-black "
         >
           <option
             value="oldest"

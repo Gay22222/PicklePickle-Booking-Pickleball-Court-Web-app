@@ -17,11 +17,11 @@ const addonSchema = new Schema(
       trim: true,
     },
 
-    // equipment | drink | support (dụng cụ, đồ uống, phụ trợ)
+    // equipment | drink | support | other
     category: {
       type: String,
       required: true,
-      enum: ["equipment", "drink", "support"],
+      enum: ["equipment", "drink", "support", "other"],
     },
 
     // Nhãn tiếng Việt hiển thị UI: "Dụng cụ", "Đồ uống", ...
@@ -38,7 +38,7 @@ const addonSchema = new Schema(
       min: 0,
     },
 
-    // Đường dẫn ảnh (relative path trong /public/booking)
+    // Đường dẫn ảnh (relative path trong /public/booking hoặc /uploads/...)
     imageUrl: {
       type: String,
       required: true,
@@ -51,6 +51,12 @@ const addonSchema = new Schema(
       ref: "Venue",
       required: true,
       index: true,
+    },
+
+    stock: {
+      type: Number,
+      default: 0,
+      min: 0,
     },
 
     description: {

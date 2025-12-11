@@ -5,6 +5,9 @@ import {
   SlotConflictError,
   getUserBookingHistory,
   getOwnerDailyOverview,
+  getAdminDailyOverview,
+  getUserBookingDetail,    
+  cancelUserBooking, 
 } from "./booking.service.js";
 import { Venue } from "../../models/venue.model.js";
 
@@ -193,3 +196,80 @@ export async function getOwnerVenuesHandler(request, reply) {
       .send({ message: err.message || "Internal server error" });
   }
 }
+
+
+// GET /api/admin/bookings/daily?date=YYYY-MM-DD&venueId=...
+export async function getAdminDailyOverviewHandler(request, reply) {
+  try {
+    const { date, venueId } = request.query || {};
+
+    if (!date) {
+      return reply
+        .code(400)
+        .send({ message: "Query param 'date' (YYYY-MM-DD) is required" });
+    }
+
+    const data = await getAdminDailyOverview({
+      dateStr: date,
+      venueId,
+    });
+
+    return reply.send({ data });
+  } catch (err) {
+    request.log.error(err, "getAdminDailyOverviewHandler error");
+    const statusCode = err.statusCode || 500;
+    return reply
+      .code(statusCode)
+      .send({ message: err.message || "Internal server error" });
+  }
+}
+
+
+export async function getUserBookingDetailHandler(request, reply) {
+  try {
+    const user = request.user;
+    const userId = user?.id || user?._id;
+
+    if (!userId) {
+      return reply.code(401).send({ message: "Unauthorized" });
+    }
+
+    const { bookingId } = request.params;
+
+    const data = await getUserBookingDetail({ userId, bookingId });
+
+    return reply.send({ data });
+  } catch (err) {
+    request.log.error(err, "getUserBookingDetailHandler error");
+    const statusCode = err.statusCode || 500;
+    return reply
+      .code(statusCode)
+      .send({ message: err.message || "Internal server error" });
+  }
+}
+
+
+
+export async function cancelUserBookingHandler(request, reply) {
+  try {
+    const user = request.user;
+    const userId = user?.id || user?._id;
+
+    if (!userId) {
+      return reply.code(401).send({ message: "Unauthorized" });
+    }
+
+    const { bookingId } = request.params;
+
+    const data = await cancelUserBooking({ userId, bookingId });
+
+    return reply.send({ data });
+  } catch (err) {
+    request.log.error(err, "cancelUserBookingHandler error");
+    const statusCode = err.statusCode || 500;
+    return reply
+      .code(statusCode)
+      .send({ message: err.message || "Internal server error" });
+  }
+}
+

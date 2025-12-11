@@ -69,7 +69,7 @@ export default function PasswordPage() {
             <label className="text-xs text-gray-500">Mật khẩu hiện tại</label>
             <input
               type="password"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-[#F9F9F9]"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-[#F9F9F9] text-black"
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
             />
@@ -79,7 +79,7 @@ export default function PasswordPage() {
             <label className="text-xs text-gray-500">Mật khẩu mới</label>
             <input
               type="password"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-[#F9F9F9]"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-[#F9F9F9] text-black"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
             />
@@ -91,7 +91,7 @@ export default function PasswordPage() {
             </label>
             <input
               type="password"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-[#F9F9F9]"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-[#F9F9F9] text-black"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
             />

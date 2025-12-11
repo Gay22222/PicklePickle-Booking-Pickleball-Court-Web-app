@@ -4,6 +4,7 @@ import { config } from "../../config/env.js";
 import { hashPassword, verifyPassword } from "../../shared/utils/password.js";
 import { sendVerificationEmail } from "../../shared/email/emailClient.js";
 import { UserRole } from "../../models/userRole.model.js";
+import { Role } from "../../models/role.model.js";
 function generateOtp() {
     return String(Math.floor(100000 + Math.random() * 900000));
 }
@@ -20,6 +21,7 @@ function toSafeUser(user, roleCode) {
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
         role: roleCode || undefined,
+        isAdminLeader: user.isAdminLeader || false,
     };
 }
 
@@ -28,6 +30,7 @@ function signToken(user, roleCode) {
         sub: user._id.toString(),
         fullName: user.fullName,
         emailVerified: user.emailVerified,
+        isAdminLeader: user.isAdminLeader || false,
     };
     if (roleCode) {
         payload.role = roleCode;
@@ -75,13 +78,23 @@ export async function registerUser(input) {
         isActive: true,
     });
 
+    // ⭐ GÁN ROLE CUSTOMER CHO USER MỚI
+    const customerRole = await Role.findOne({ code: "CUSTOMER" });
+    if (customerRole) {
+        await UserRole.create({
+            user: user._id,
+            role: customerRole._id,
+        });
+    }
+
     try {
         await sendVerificationEmail(email, otp);
     } catch (err) {
         console.error("[Auth] sendVerificationEmail error:", err.message);
     }
 
-    const safeUser = toSafeUser(user);
+    // ⭐ Trả safeUser kèm role CUSTOMER
+    const safeUser = toSafeUser(user, "CUSTOMER");
     const payload = { user: safeUser };
 
     if (config.nodeEnv === "development") {
@@ -90,6 +103,7 @@ export async function registerUser(input) {
 
     return payload;
 }
+
 
 // ========== VERIFY EMAIL ==========
 export async function verifyEmail(input) {

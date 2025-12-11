@@ -9,6 +9,7 @@ const splitRuleSchema = new Schema(
     effectiveFrom: { type: Date },
     effectiveTo:   { type: Date },
     note:      { type: String },
+    isActive: { type: Boolean, default: true },
   },
   { timestamps: true }
 );

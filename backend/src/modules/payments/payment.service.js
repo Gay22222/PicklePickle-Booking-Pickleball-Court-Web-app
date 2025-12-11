@@ -86,7 +86,6 @@ export async function createCheckout({ paymentMethod, bookingId, clientIp }) {
     case "MOMO":
       return await createMomoCheckout(booking, amount);
     case "VNPAY":
-      // truyền clientIp xuống để sau này deploy dễ xử lý
       return await createVnpayCheckout(booking, amount, clientIp);
     case "ZALOPAY":
       return await createZalopayCheckout(booking, amount);
@@ -98,7 +97,7 @@ export async function createCheckout({ paymentMethod, bookingId, clientIp }) {
 }
 
 /**
- * Gọi MoMo sandbox, tạo Payment (PENDING), trả payUrl.
+ * ===== MOMO CHECKOUT =====
  */
 async function createMomoCheckout(booking, amount) {
   const momoConfig = config.payment?.momo || {};
@@ -222,15 +221,15 @@ async function createMomoCheckout(booking, amount) {
 }
 
 /**
- * Helper chung cho VNPay (sort & build query)
+ * ===== VNPay helpers =====
  */
+
 function sortObject(obj) {
   let sorted = {};
   let arr = [];
 
   for (let key in obj) {
     if (obj.hasOwnProperty(key)) {
-      // key không có ký tự lạ nên encode xong vẫn giống, nhưng cứ theo đúng mẫu
       arr.push(encodeURIComponent(key));
     }
   }
@@ -239,26 +238,21 @@ function sortObject(obj) {
 
   for (let i = 0; i < arr.length; i++) {
     const key = arr[i];
-    // encode value và đổi space -> "+"
     sorted[key] = encodeURIComponent(obj[key]).replace(/%20/g, "+");
   }
 
   return sorted;
 }
 
-
-
 /**
- * Tạo URL thanh toán VNPay thật (sandbox).
+ * Tạo URL thanh toán VNPay (sandbox).
  */
 async function createVnpayCheckout(booking, amount, clientIp) {
   const vnpConfig = config.payment?.vnpay || {};
   const tmnCode = vnpConfig.tmnCode;
   const secretKey = vnpConfig.hashSecret;
-  // hỗ trợ cả paymentUrl mới và endpoint cũ cho chắc
   const vnpUrl = vnpConfig.paymentUrl || vnpConfig.endpoint;
   const returnUrl = vnpConfig.returnUrl;
-
 
   if (!tmnCode || !secretKey || !vnpUrl || !returnUrl) {
     throw Object.assign(
@@ -287,14 +281,10 @@ async function createVnpayCheckout(booking, amount, clientIp) {
 
   const orderId = `${booking.code || booking._id}-${Date.now()}`; // vnp_TxnRef
   const orderInfo = `Thanh toán booking ${booking.code || booking._id}`;
-
-  // IP client: lấy từ controller truyền vào, fallback local để dev
   const ipAddr = clientIp || "127.0.0.1";
-
   const locale = vnpConfig.locale || "vn";
   const currCode = vnpConfig.currency || "VND";
 
-  // Tham số gửi sang VNPay
   let vnp_Params = {
     vnp_Version: vnpConfig.version || "2.1.0",
     vnp_Command: vnpConfig.command || "pay",
@@ -310,25 +300,16 @@ async function createVnpayCheckout(booking, amount, clientIp) {
     vnp_CreateDate: createDate,
   };
 
-  // --- GIỐNG HỆT DEMO VNPay ---
   vnp_Params = sortObject(vnp_Params);
-
-  // 1) build signData: dùng qs.stringify, encode:false
   const signData = qs.stringify(vnp_Params, { encode: false });
-
-  // 2) hash SHA512
   const signed = crypto
     .createHmac("sha512", secretKey)
     .update(Buffer.from(signData, "utf-8"))
     .digest("hex");
-
-  // 3) gắn vào params
   vnp_Params["vnp_SecureHash"] = signed;
 
-  // 4) build URL: CŨNG encode:false vì value đã được encode ở sortObject rồi
   const paymentUrl = vnpUrl + "?" + qs.stringify(vnp_Params, { encode: false });
 
-  // log debug nếu cần
   console.log("========== VNPay vnp_Params (sorted+encoded) ==========");
   console.log(vnp_Params);
   console.log("========== SIGN DATA ==========");
@@ -337,8 +318,6 @@ async function createVnpayCheckout(booking, amount, clientIp) {
   console.log(signed);
   console.log("========== PAYMENT URL ==========");
   console.log(paymentUrl);
-
-
 
   const pendingStatusId = await getPaymentStatusId("PENDING");
 
@@ -351,18 +330,6 @@ async function createVnpayCheckout(booking, amount, clientIp) {
     currency: "VND",
     status: pendingStatusId,
   });
-  console.log("========== VNPay vnp_Params (sorted) ==========");
-  console.log(vnp_Params);
-
-  console.log("========== SIGN DATA ==========");
-  console.log(signData);
-
-  console.log("========== SECURE HASH (your hash) ==========");
-  console.log(signed);
-
-  console.log("========== PAYMENT URL ==========");
-  console.log(paymentUrl);
-
 
   return {
     paymentId: paymentDoc._id,
@@ -375,14 +342,16 @@ async function createVnpayCheckout(booking, amount, clientIp) {
   };
 }
 
-// Tạo order ZaloPay sandbox, trả orderurl để redirect.
+/**
+ * ===== ZaloPay checkout =====
+ */
 async function createZalopayCheckout(booking, amount) {
   const zaloConfig = config.payment?.zalopay || {};
-  const appId = Number(zaloConfig.appId);      // ví dụ 553
-  const key1 = zaloConfig.key1;               // "9phuAOYh..."
-  const endpoint = zaloConfig.endpoint;       // "https://sb-openapi.zalopay.vn/v2/create"
-  const redirectUrl = zaloConfig.redirectUrl; 
-  const callbackUrl = zaloConfig.callbackUrl; // URL nhận callback (IPN) từ ZaloPay
+  const appId = Number(zaloConfig.appId);
+  const key1 = zaloConfig.key1;
+  const endpoint = zaloConfig.endpoint;
+  const redirectUrl = zaloConfig.redirectUrl;
+  const callbackUrl = zaloConfig.callbackUrl;
 
   if (!appId || !key1 || !endpoint) {
     throw Object.assign(
@@ -399,25 +368,18 @@ async function createZalopayCheckout(booking, amount) {
     );
   }
 
-  // app_user: có thể dùng id user hoặc tên mặc định
   const appUser = "demo";
-
-  // app_time = unix timestamp ms
   const appTime = Date.now();
 
-  // app_trans_id phải có format yymmdd_XXXX
   const now = new Date();
-  const yymmdd = now
-    .toISOString()
-    .slice(2, 10)     // "25-02-10"
-    .replace(/-/g, ""); // -> "250210"
-  const uniqueSuffix = Math.floor(Math.random() * 1e6).toString().padStart(6, "0");
+  const yymmdd = now.toISOString().slice(2, 10).replace(/-/g, "");
+  const uniqueSuffix = Math.floor(Math.random() * 1e6)
+    .toString()
+    .padStart(6, "0");
   const appTransId = `${yymmdd}_${uniqueSuffix}`;
-
 
   const description = `Thanh toán booking ${booking.code || booking._id}`;
 
-  // item & embed_data là JSON string
   const item = JSON.stringify([
     {
       itemid: "court",
@@ -428,13 +390,10 @@ async function createZalopayCheckout(booking, amount) {
   ]);
 
   const embedData = JSON.stringify({
-    redirecturl: zaloConfig.redirectUrl, // URL redirect về FE sau thanh toán
+    redirecturl: redirectUrl,
     preferred_payment_method: ["zalopay_wallet"],
   });
 
-  // HMAC input theo docs:
-  // hmac_input = app_id + "|" + app_trans_id + "|" + app_user +
-  //              "|" + amount + "|" + app_time + "|" + embed_data + "|" + item
   const dataMac = [
     appId,
     appTransId,
@@ -450,7 +409,6 @@ async function createZalopayCheckout(booking, amount) {
     .update(dataMac, "utf-8")
     .digest("hex");
 
-  // Body theo spec mới: app_id, app_user, app_trans_id, app_time, embed_data...
   const body = {
     app_id: appId,
     app_user: appUser,
@@ -460,8 +418,8 @@ async function createZalopayCheckout(booking, amount) {
     description,
     item,
     embed_data: embedData,
-    bank_code: "",          // để trống -> cho chọn tất cả phương thức
-    // callback_url: callbackUrl,
+    bank_code: "",
+    // callback_url: callbackUrl, // để sau nếu dùng IPN
     mac,
   };
 
@@ -487,11 +445,8 @@ async function createZalopayCheckout(booking, amount) {
   console.log("===== ZaloPay response =====");
   console.log(resJson);
 
-  // Hỗ trợ cả format cũ (returncode) và mới (return_code)
-  const returnCode =
-    resJson.return_code ?? resJson.returncode;
-  const returnMessage =
-    resJson.return_message ?? resJson.returnmessage;
+  const returnCode = resJson.return_code ?? resJson.returncode;
+  const returnMessage = resJson.return_message ?? resJson.returnmessage;
 
   if (returnCode !== 1) {
     const err = new Error(
@@ -533,10 +488,8 @@ async function createZalopayCheckout(booking, amount) {
   };
 }
 
-
-
 /**
- * Handle IPN từ MoMo – cập nhật Payment + Booking.
+ * ===== MoMo IPN =====
  */
 export async function handleMomoIpn(body) {
   const { orderId, resultCode, message } = body || {};
@@ -545,7 +498,6 @@ export async function handleMomoIpn(body) {
     throw new Error("Missing orderId in MoMo IPN");
   }
 
-  // Tìm payment theo orderId
   const payment = await Payment.findOne({ orderId }).populate("booking");
   if (!payment) {
     throw new Error("Payment not found for this orderId");
@@ -558,16 +510,10 @@ export async function handleMomoIpn(body) {
   payment.status = statusId;
   await payment.save();
 
-  if (payment.booking) {
-    if (success) {
-      const confirmedId = await getBookingStatusId("CONFIRMED");
-      payment.booking.status = confirmedId;
-    } else {
-      const failedId = await getBookingStatusId("PAYMENT_FAILED");
-      if (failedId) {
-        payment.booking.status = failedId;
-      }
-    }
+  if (payment.booking && success) {
+    // Chỉ đổi booking khi thanh toán thành công
+    const confirmedId = await getBookingStatusId("CONFIRMED");
+    payment.booking.status = confirmedId;
     await payment.booking.save();
   }
 
@@ -577,7 +523,7 @@ export async function handleMomoIpn(body) {
 }
 
 /**
- * Handle IPN VNPay – cập nhật Payment + Booking.
+ * ===== VNPay IPN =====
  */
 export async function handleVnpayIpn(query) {
   let vnp_Params = { ...(query || {}) };
@@ -593,14 +539,13 @@ export async function handleVnpayIpn(query) {
   delete vnp_Params["vnp_SecureHashType"];
 
   const signData = Object.keys(vnp_Params)
-    .map(k => `${k}=${vnp_Params[k]}`)
+    .map((k) => `${k}=${vnp_Params[k]}`)
     .join("&");
 
   const signed = crypto
     .createHmac("sha512", secretKey)
     .update(signData, "utf-8")
     .digest("hex");
-
 
   if (secureHash !== signed) {
     return { RspCode: "97", Message: "Fail checksum" };
@@ -625,21 +570,69 @@ export async function handleVnpayIpn(query) {
   payment.status = statusId;
   await payment.save();
 
-  if (payment.booking) {
-    if (success) {
-      const confirmedId = await getBookingStatusId("CONFIRMED");
-      payment.booking.status = confirmedId;
-    } else {
-      const failedId = await getBookingStatusId("PAYMENT_FAILED");
-      if (failedId) {
-        payment.booking.status = failedId;
-      }
-    }
+  if (payment.booking && success) {
+    const confirmedId = await getBookingStatusId("CONFIRMED");
+    payment.booking.status = confirmedId;
     await payment.booking.save();
   }
 
   console.log(`[VNPay IPN] orderId=${orderId} rspCode=${rspCode}`);
 
-  // theo spec VNPay: luôn trả JSON RspCode/Message
   return { RspCode: "00", Message: "success" };
+}
+
+/**
+ * ===== Confirm từ trang return (không dùng IPN) =====
+ * provider: "MOMO" | "VNPAY" | "ZALOPAY"
+ * orderId: MoMo/VNPay: orderId / vnp_TxnRef, ZaloPay: appTransId
+ * success: boolean
+ */
+export async function confirmPaymentFromReturn({ provider, orderId, success }) {
+  if (!provider || !orderId) {
+    throw Object.assign(
+      new Error("provider and orderId are required"),
+      { statusCode: 400 }
+    );
+  }
+
+  const normalized = normalizePaymentMethod(provider);
+  if (!normalized) {
+    throw Object.assign(new Error("Unsupported payment provider"), {
+      statusCode: 400,
+    });
+  }
+
+  const payment = await Payment.findOne({
+    provider: normalized,
+    orderId,
+  }).populate("booking");
+
+  if (!payment) {
+    throw Object.assign(
+      new Error("Payment not found for this provider/orderId"),
+      { statusCode: 404 }
+    );
+  }
+
+  const statusCode = success ? "SUCCEEDED" : "FAILED";
+  const paymentStatusId = await getPaymentStatusId(statusCode);
+
+  payment.status = paymentStatusId;
+  await payment.save();
+
+  if (payment.booking && success) {
+    // Chỉ đổi booking khi thanh toán thành công
+    const confirmedId = await getBookingStatusId("CONFIRMED");
+    payment.booking.status = confirmedId;
+    await payment.booking.save();
+  }
+
+  return {
+    provider: normalized,
+    orderId,
+    success,
+    paymentId: payment._id,
+    bookingId: payment.booking?._id || null,
+    bookingCode: payment.booking?.code || null,
+  };
 }
