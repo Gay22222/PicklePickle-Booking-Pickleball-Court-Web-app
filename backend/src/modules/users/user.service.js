@@ -491,8 +491,27 @@ export async function listOwnerUsersService(adminId, query = {}) {
     .sort({ createdAt: -1 })
     .lean();
 
-  return users.map(mapOwnerUser);
+  if (users.length === 0) return [];
+
+  
+  const ownerObjectIds = users.map((u) => u._id);
+
+  const counts = await Venue.aggregate([
+    { $match: { manager: { $in: ownerObjectIds } } },
+    { $group: { _id: "$manager", count: { $sum: 1 } } },
+  ]);
+
+  const countMap = counts.reduce((acc, cur) => {
+    acc[cur._id.toString()] = cur.count;
+    return acc;
+  }, {});
+
+  return users.map((u) => ({
+    ...mapOwnerUser(u),
+    venuesCount: countMap[u._id.toString()] || 0,
+  }));
 }
+
 
 /**
  * Tạo chủ sân mới (admin tạo -> auto emailVerified = true)

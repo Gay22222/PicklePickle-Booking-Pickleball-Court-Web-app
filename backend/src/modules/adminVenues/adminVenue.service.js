@@ -6,6 +6,7 @@ import { PriceRule } from "../../models/priceRule.model.js";
 import { HttpError } from "../../shared/errors/httpError.js";
 import { assertAdminManager } from "../../modules/users/user.service.js";
 
+
 function mapVenue(v) {
   return {
     id: v._id.toString(),
@@ -33,30 +34,81 @@ function mapVenue(v) {
 export async function listVenuesService(adminId, query = {}) {
   await assertAdminManager(adminId);
 
-  const { search = "", status = "ALL", ownerId } = query;
-
-  const filter = {};
-
-  if (status && status !== "ALL") {
-    filter.isActive = status === "ACTIVE";
-  }
-
-  if (ownerId) {
-    filter.manager = ownerId;
-  }
-
-  if (search) {
-    const regex = new RegExp(search.trim(), "i");
-    filter.$or = [{ name: regex }, { district: regex }, { address: regex }];
-  }
-
-  const venues = await Venue.find(filter)
-    .populate("manager", "fullName email")
+  const venues = await Venue.find({})
+    .populate("manager", "fullName")
     .sort({ createdAt: -1 })
     .lean();
 
-  return venues.map(mapVenue);
+  const venueIds = venues.map((v) => v._id);
+
+  // 1) Lấy open hours của tất cả venue
+  const openHoursDocs = await VenueOpenHour.find({ venue: { $in: venueIds } })
+    .sort({ venue: 1, timeFrom: 1 })
+    .lean();
+
+  // Map: venueId -> { openTime, closeTime }
+  const openHourMap = new Map();
+  for (const h of openHoursDocs) {
+    const key = h.venue.toString();
+    const from = (h.timeFrom || "05:00").slice(0, 5);
+    const to = (h.timeTo || "22:00").slice(0, 5);
+
+    if (!openHourMap.has(key)) {
+      openHourMap.set(key, { openTime: from, closeTime: to });
+      continue;
+    }
+    const cur = openHourMap.get(key);
+    if (from < cur.openTime) cur.openTime = from;
+    if (to > cur.closeTime) cur.closeTime = to;
+    openHourMap.set(key, cur);
+  }
+
+  // 2) Lấy price rules của tất cả venue, sort để lấy rule "đầu tiên theo giờ bắt đầu"
+  const priceRulesDocs = await PriceRule.find({ venue: { $in: venueIds } })
+    .sort({ venue: 1, dayOfWeekFrom: 1, timeFrom: 1 })
+    .lean();
+
+  // Map: venueId -> first rule (shape UI)
+  const firstRuleMap = new Map();
+  for (const r of priceRulesDocs) {
+    const key = r.venue.toString();
+    if (firstRuleMap.has(key)) continue;
+
+    const price =
+      typeof r.fixedPricePerHour === "number"
+        ? r.fixedPricePerHour
+        : typeof r.walkinPricePerHour === "number"
+        ? r.walkinPricePerHour
+        : 0;
+
+    firstRuleMap.set(key, {
+      id: r._id.toString(),
+      startTime: (r.timeFrom || "").slice(0, 5),
+      endTime: (r.timeTo || "").slice(0, 5),
+      price,
+    });
+  }
+
+  // 3) Trả list venues đã "hydrate" sẵn open/close + priceRules[0]
+  return venues.map((v) => {
+    const dto = mapVenue(v);
+    const key = v._id.toString();
+
+    const oh = openHourMap.get(key);
+    dto.openTime = oh?.openTime || "05:00";
+    dto.closeTime = oh?.closeTime || "22:00";
+
+    const firstRule = firstRuleMap.get(key);
+    dto.priceRules = firstRule ? [firstRule] : [];
+
+    
+    dto.firstPricePerHour = firstRule?.price || 0;
+
+    return dto;
+  });
 }
+
+
 
 export async function createVenueService(adminId, payload) {
   await assertAdminManager(adminId);
