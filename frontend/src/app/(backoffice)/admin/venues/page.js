@@ -1534,10 +1534,7 @@ function OwnerFormDialog({ mode, values, onChange, onClose, onSubmit }) {
           <h3 className="text-base md:text-lg font-semibold text-gray-900">
             {title}
           </h3>
-          <p className="mt-1 text-xs text-gray-500">
-            Thông tin tài khoản chủ sân. Mật khẩu ở đây chỉ là mock, sau này sẽ
-            dùng form đăng ký / gửi mail kích hoạt thật.
-          </p>
+
 
           <div className="mt-4 space-y-3">
             <div>
@@ -1594,7 +1591,7 @@ function OwnerFormDialog({ mode, values, onChange, onClose, onSubmit }) {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-800">
-                  Mật khẩu (mock)
+                  Mật khẩu 
                 </label>
                 <input
                   type="password"
@@ -1735,12 +1732,7 @@ function VenueFormDialog({
             <h3 className="text-base md:text-lg font-semibold text-gray-900">
               {title}
             </h3>
-            <p className="mt-1 text-xs text-gray-500">
-              Form này mock đầy đủ các field tối thiểu: thông tin sân, chủ sân,
-              list ảnh, giờ mở / giờ đóng và cấu hình giá theo khung giờ. Sau
-              này ta map thẳng field với backend <code>venueId</code> /{" "}
-              <code>courtId</code>.
-            </p>
+
           </div>
 
           {/* Thông tin cơ bản */}

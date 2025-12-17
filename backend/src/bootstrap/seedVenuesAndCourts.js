@@ -43,6 +43,11 @@ const COMMON_FEATURE_IMAGES = [
 
 const COMMON_AMENITY_IMAGES = Array(5).fill("/courts/mockupduplicate.png");
 
+function buildCourtNames(count) {
+  const n = Math.max(1, Number(count) || 1);
+  return Array.from({ length: n }, (_, i) => `Sân ${i + 1}`);
+}
+
 /**
  * Tạo sẵn 3 cụm sân:
  *  - PicklePickle Thủ Đức
@@ -72,6 +77,7 @@ export async function ensureVenuesAndCourts(ownerUser) {
 
   console.log(" Seeding venues, courts, open hours, price rules...");
 
+  
   const venueSeeds = [
     {
       name: "PicklePickle Thủ Đức",
@@ -82,12 +88,8 @@ export async function ensureVenuesAndCourts(ownerUser) {
       heroTagline: "Cụm 4 sân Pickleball ngoài trời tại trung tâm Thủ Đức",
       phone: "0909 123 456",
       basePricePerHour: 80000,
-      courts: ["Sân 1", "Sân 2", "Sân 3", "Sân 4"],
-      images: [
-        "/courts/sample1.png",
-        "/courts/sample2.png",
-        "/courts/sample3.png",
-      ],
+      courtsCount: 4,
+      images: ["/courts/sample1.png", "/courts/sample2.png", "/courts/sample3.png"],
     },
     {
       name: "PicklePickle Quận 1",
@@ -98,12 +100,8 @@ export async function ensureVenuesAndCourts(ownerUser) {
       heroTagline: "Cụm 3 sân Pickleball ngay trung tâm Quận 1",
       phone: "0909 234 567",
       basePricePerHour: 90000,
-      courts: ["Sân 1", "Sân 2", "Sân 3"],
-      images: [
-        "/courts/sample2.png",
-        "/courts/sample3.png",
-        "/courts/sample1.png",
-      ],
+      courtsCount: 3,
+      images: ["/courts/sample2.png", "/courts/sample3.png", "/courts/sample1.png"],
     },
     {
       name: "PicklePickle Quận 7",
@@ -114,17 +112,15 @@ export async function ensureVenuesAndCourts(ownerUser) {
       heroTagline: "Cụm 4 sân Pickleball tại khu Nam Sài Gòn",
       phone: "0909 345 678",
       basePricePerHour: 100000,
-      courts: ["Sân 1", "Sân 2", "Sân 3", "Sân 4"],
-      images: [
-        "/courts/sample2.png",
-        "/courts/sample1.png",
-        "/courts/sample3.png",
-      ],
+      courtsCount: 4,
+      images: ["/courts/sample2.png", "/courts/sample1.png", "/courts/sample3.png"],
     },
   ];
 
   for (const v of venueSeeds) {
-    // 1. Venue
+    const courtsCount = Math.max(1, Number(v.courtsCount) || 1);
+
+    // 1) Venue
     const venue = await Venue.create({
       name: v.name,
       district: v.district,
@@ -134,6 +130,9 @@ export async function ensureVenuesAndCourts(ownerUser) {
       timeZone: "Asia/Ho_Chi_Minh",
       slotMinutes: 60,
       isActive: true,
+
+      // lưu courtsCount vào Venue
+      courtsCount,
 
       // GÁN CHỦ SÂN MẶC ĐỊNH
       manager: ownerUser ? ownerUser._id : undefined,
@@ -152,7 +151,7 @@ export async function ensureVenuesAndCourts(ownerUser) {
       featureImages: COMMON_FEATURE_IMAGES,
       amenityImages: COMMON_AMENITY_IMAGES,
 
-      images: v.images.map((url, idx) => ({
+      images: (v.images || []).map((url, idx) => ({
         url,
         isPrimary: idx === 0,
         sortOrder: idx,
@@ -161,18 +160,21 @@ export async function ensureVenuesAndCourts(ownerUser) {
 
     console.log(`  -> Created venue: ${venue.name}`);
 
-    // 2. Courts
+    // 2) Courts: tạo theo courtsCount => "Sân 1..n"
+    const courtNames = buildCourtNames(courtsCount);
     const courtDocs = [];
-    for (const courtName of v.courts) {
+
+    for (const courtName of courtNames) {
       const court = await Court.create({
         venue: venue._id,
         name: courtName,
         surface: "Hard court",
+        isActive: true,
       });
       courtDocs.push(court);
     }
 
-    // 3. Open hours: T2–CN, 05:00–23:00
+    // 3) Open hours: T2–CN, 05:00–23:00
     for (let weekday = 1; weekday <= 7; weekday++) {
       await VenueOpenHour.create({
         venue: venue._id,
@@ -182,7 +184,7 @@ export async function ensureVenuesAndCourts(ownerUser) {
       });
     }
 
-    // 4. Price rules
+    // 4) Price rules
     const base = v.basePricePerHour;
 
     await PriceRule.insertMany([
@@ -228,32 +230,34 @@ export async function ensureVenuesAndCourts(ownerUser) {
       },
     ]);
 
-    // 5. Holiday demo
+    // 5) Holiday demo
     await VenueHoliday.create({
       venue: venue._id,
       date: new Date("2025-01-01T00:00:00.000Z"),
       reason: "Nghỉ lễ Tết Dương lịch (mock)",
     });
 
-    // 6. Blackout slot demo
+    // 6) Blackout slot demo
     const firstCourt = courtDocs[0];
-    await BlackoutSlot.create({
-      venue: venue._id,
-      court: firstCourt._id,
-      date: new Date("2025-01-05T00:00:00.000Z"),
-      slotStart: 8,
-      slotEnd: 9,
-      reason: "Bảo trì mặt sân (mock)",
-    });
+    if (firstCourt) {
+      await BlackoutSlot.create({
+        venue: venue._id,
+        court: firstCourt._id,
+        date: new Date("2025-01-05T00:00:00.000Z"),
+        slotStart: 8,
+        slotEnd: 9,
+        reason: "Bảo trì mặt sân (mock)",
+      });
+    }
 
-    // 7. Split rule
+    // 7) Split rule
     await SplitRule.create({
       venue: venue._id,
       provider: "DEFAULT",
       platformSharePercent: 10,
       effectiveFrom: new Date("2025-01-01T00:00:00.000Z"),
       effectiveTo: null,
-      note: "Mock: 10% cho nền tảng, 90% cho chủ sân",
+      note: " 10% cho nền tảng, 90% cho chủ sân",
     });
   }
 

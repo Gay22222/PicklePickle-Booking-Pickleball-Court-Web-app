@@ -370,11 +370,34 @@ export async function getVenueAvailability({ venueId, dateStr }) {
     throw new Error("Invalid date format, expected YYYY-MM-DD");
   }
 
-  const venue = await Venue.findById(venueId);
+  const venue = await Venue.findById(venueId).lean();
   if (!venue) throw new Error("Venue not found");
 
-  const courts = await Court.find({ venue: venueId, isActive: true }).lean();
-  if (courts.length === 0) {
+  // 0) Lấy courts; nếu seed mới chỉ có courtsCount mà chưa có Court docs -> auto create
+  let courts = await Court.find({ venue: venueId, isActive: true })
+    .sort({ name: 1 })
+    .lean();
+
+  if (!courts || courts.length === 0) {
+    const count = Math.max(1, Number(venue.courtsCount || 1));
+
+    // Tạo courts theo chuẩn "Sân 1..n"
+    await Court.insertMany(
+      Array.from({ length: count }, (_, i) => ({
+        venue: venue._id,
+        name: `Sân ${i + 1}`,
+        surface: "Hard court",
+        isActive: true,
+      }))
+    );
+
+    courts = await Court.find({ venue: venueId, isActive: true })
+      .sort({ name: 1 })
+      .lean();
+  }
+
+  // Nếu vẫn không có court (trường hợp dữ liệu venue hỏng)
+  if (!courts || courts.length === 0) {
     return {
       venueId,
       date: dateStr,
@@ -390,7 +413,7 @@ export async function getVenueAvailability({ venueId, dateStr }) {
   const isoDay = weekday === 0 ? 7 : weekday; // 1..7
 
   // 1) Kiểm tra ngày nghỉ
-  const holiday = await VenueHoliday.findOne({ venue: venueId, date });
+  const holiday = await VenueHoliday.findOne({ venue: venueId, date }).lean();
   if (holiday) {
     return {
       venueId,
@@ -409,7 +432,11 @@ export async function getVenueAvailability({ venueId, dateStr }) {
   }
 
   // 2) Lấy giờ mở cửa theo weekday (config open hours)
-  let openHour = await VenueOpenHour.findOne({ venue: venueId, weekday }).lean();
+  // ✅ dùng isoDay (1..7) để match data open hours thường config theo 1..7
+  let openHour = await VenueOpenHour.findOne({
+    venue: venueId,
+    weekday: isoDay,
+  }).lean();
 
   if (!openHour) {
     // Fallback nếu chưa config open hours
@@ -430,9 +457,7 @@ export async function getVenueAvailability({ venueId, dateStr }) {
     throw new Error("Invalid open hour config for venue");
   }
 
-  // 3) Lấy PriceRule theo ngày, dùng để:
-  //    - Xác định khung giờ thực sự hiển thị
-  //    - Tính giá cho từng slot
+  // 3) Lấy PriceRule theo ngày
   const priceRulesForDay = await PriceRule.find({
     venue: venueId,
     dayOfWeekFrom: { $lte: isoDay },
@@ -442,12 +467,10 @@ export async function getVenueAvailability({ venueId, dateStr }) {
   const rangeFromRules = getHoursRangeFromPriceRules(priceRulesForDay);
   if (rangeFromRules) {
     const { minFromHour, maxToHour } = rangeFromRules;
-    // Chỉ cho phép đặt trong [max(openHour, minRule), min(closeHour, maxRule))
     baseStartHour = Math.max(baseStartHour, minFromHour);
     baseEndHourExclusive = Math.min(baseEndHourExclusive, maxToHour);
   }
 
-  // Nếu sau khi giao cắt mà không còn giờ hợp lệ => không có slot nào
   if (baseEndHourExclusive <= baseStartHour) {
     return {
       venueId,
@@ -465,8 +488,8 @@ export async function getVenueAvailability({ venueId, dateStr }) {
     };
   }
 
-  const firstSlotIndex = baseStartHour; // ví dụ 6
-  const lastSlotIndex = baseEndHourExclusive - 1; // ví dụ 22 nếu close 23:00
+  const firstSlotIndex = baseStartHour;
+  const lastSlotIndex = baseEndHourExclusive - 1;
   const slotMinutes = venue.slotMinutes || 60;
 
   const courtIds = courts.map((c) => c._id);
@@ -494,7 +517,7 @@ export async function getVenueAvailability({ venueId, dateStr }) {
     }
   }
 
-  // 5) Build slots cho từng court, gán đúng giá theo PriceRule
+  // 5) Build slots cho từng court
   const courtsWithSlots = courts.map((c) => {
     const slots = [];
 
@@ -507,7 +530,6 @@ export async function getVenueAvailability({ venueId, dateStr }) {
       if (bookedSet.has(key)) status = "booked";
       if (blackoutSet.has(key)) status = "blackout";
 
-      // Giá: ưu tiên lấy từ PriceRule, fallback mock nếu chưa cấu hình
       let pricePerHour = getPriceForSlotFromRules(priceRulesForDay, idx, "online");
       if (pricePerHour == null) {
         pricePerHour = getPricePerHourFromSlotIndex(idx);
@@ -515,7 +537,7 @@ export async function getVenueAvailability({ venueId, dateStr }) {
 
       slots.push({
         slotIndex: idx,
-        timeFrom: minutesToTimeStr(startMin), // "HH:00"
+        timeFrom: minutesToTimeStr(startMin),
         timeTo: minutesToTimeStr(endMin),
         status,
         pricePerHour,
@@ -533,7 +555,7 @@ export async function getVenueAvailability({ venueId, dateStr }) {
     venueId,
     date: dateStr,
     slotMinutes,
-    weekday, // giữ nguyên 0..6 như cũ
+    weekday, 
     openTime: minutesToTimeStr(baseStartHour * 60),
     closeTime: minutesToTimeStr(baseEndHourExclusive * 60),
     isHoliday: false,
