@@ -153,7 +153,7 @@ export class SlotConflictError extends Error {
 // ================== Service: tạo booking ==================
 
 export async function createBookingFromSlots(payload) {
-  const { userId, venueId, date, courts, discount = 0, note } = payload;
+  const { userId, venueId, date, courts, discount = 0, note, addonsTotal = 0, addons } = payload;
 
   if (!userId) throw new Error("userId is required");
   if (!venueId) throw new Error("venueId is required");
@@ -247,23 +247,67 @@ export async function createBookingFromSlots(payload) {
     throw err;
   }
 
-  // 3) BookingItem: gom theo court + segment liên tiếp
+  // 3) BookingItem: gom theo court + segment liên tiếp (NHƯNG tách theo GIÁ)
   let grossAmount = 0;
   const bookingItemsDocs = [];
 
+  // === Lấy PriceRule theo ngày giống availability ===
+  const weekday = bookingDate.getDay(); // 0..6
+  const isoDay = weekday === 0 ? 7 : weekday; // 1..7
+
+  const priceRulesForDay = await PriceRule.find({
+    venue: venueId,
+    dayOfWeekFrom: { $lte: isoDay },
+    dayOfWeekTo: { $gte: isoDay },
+  }).lean();
+
+  // Helper: giá cho 1 slotIndex (slotIndex ở đây chính là "giờ" 05..22)
+  const getPriceForSlotIndex = (slotIndex) => {
+    let p = getPriceForSlotFromRules(priceRulesForDay, slotIndex, "online");
+    if (p == null) p = getPricePerHourFromSlotIndex(slotIndex); // fallback mock
+    return p;
+  };
+
+  // Helper: group liên tiếp + cùng giá => booking item
+  function groupContinuousSamePrice(slotIndices) {
+    const sorted = [...new Set(slotIndices)].sort((a, b) => a - b);
+    if (sorted.length === 0) return [];
+
+    const groups = [];
+    let start = sorted[0];
+    let prev = sorted[0];
+    let curPrice = getPriceForSlotIndex(start);
+
+    for (let i = 1; i < sorted.length; i++) {
+      const idx = sorted[i];
+      const price = getPriceForSlotIndex(idx);
+
+      const isContinuous = idx === prev + 1;
+      const samePrice = price === curPrice;
+
+      if (isContinuous && samePrice) {
+        prev = idx;
+      } else {
+        groups.push({ start, end: prev, unitPrice: curPrice });
+        start = idx;
+        prev = idx;
+        curPrice = price;
+      }
+    }
+
+    groups.push({ start, end: prev, unitPrice: curPrice });
+    return groups;
+  }
+
   for (const c of courts) {
-    const { courtId, slotIndices, unitPricePerHour } = c;
+    const { courtId, slotIndices } = c;
     if (!Array.isArray(slotIndices) || slotIndices.length === 0) continue;
 
-    const segments = groupContinuousSlots(slotIndices);
+    const segments = groupContinuousSamePrice(slotIndices);
 
     for (const seg of segments) {
       const hoursCount = seg.end - seg.start + 1;
-      const pricePerHour =
-        typeof unitPricePerHour === "number"
-          ? unitPricePerHour
-          : getPricePerHourFromSlotIndex(seg.start);
-
+      const pricePerHour = seg.unitPrice;
       const lineAmount = pricePerHour * hoursCount;
 
       bookingItemsDocs.push({
@@ -284,16 +328,24 @@ export async function createBookingFromSlots(payload) {
     await BookingItem.insertMany(bookingItemsDocs);
   }
 
-  // 4) Update tiền trên Booking
-  const finalGross = grossAmount;
+  // 4) Update tiền trên Booking (CỘNG addonsTotal)
+  const addonsItems = Array.isArray(addons?.items) ? addons.items : [];
+  const addonsTotalNumber =
+    Number(addons?.total ?? addonsTotal) || 0;
+
+  const extra = addonsTotalNumber;
+  const finalGross = grossAmount + extra;
   const finalDiscount = discount || 0;
   const finalTotal = finalGross - finalDiscount;
 
   booking.grossAmount = finalGross;
   booking.discount = finalDiscount;
   booking.totalAmount = finalTotal;
+  booking.addons = {
+    items: addonsItems,
+    total: addonsTotalNumber,
+  };
   await booking.save();
-
   const bookingItems = await BookingItem.find({ booking: booking._id })
     .populate("court")
     .lean();
@@ -303,6 +355,7 @@ export async function createBookingFromSlots(payload) {
     items: bookingItems,
   };
 }
+
 
 // ================== Service: availability venue ==================
 
@@ -519,7 +572,7 @@ export async function getUserBookingHistory({
   const [total, bookings] = await Promise.all([
     Booking.countDocuments(query),
     Booking.find(query)
-      .populate("venue", "name address")
+      .populate("venue", "name address avatarImage images")
       .populate("status", "code label isFinal isCancel")
       .sort({ createdAt: -1 })
       .skip((pageNumber - 1) * pageSize)
@@ -562,11 +615,11 @@ export async function getUserBookingHistory({
   }
 
   function slotIndexToTime(slotIndex) {
-    const baseHour = 5;
-    const hour = baseHour + Number(slotIndex || 0);
-    const hh = String(hour).padStart(2, "0");
-    return `${hh}:00`;
+    const h = Number(slotIndex);
+    if (Number.isNaN(h)) return "";
+    return `${String(h).padStart(2, "0")}:00`;
   }
+
 
   const items = bookings.map((b) => {
     const bookingId = b._id.toString();
@@ -617,6 +670,15 @@ export async function getUserBookingHistory({
       venueName: b.venue?.name || "",
       venueAddress: b.venue?.address || "",
       courtName: courtName || "Sân chưa rõ",
+      venue: b.venue
+        ? {
+          id: b.venue._id?.toString(),
+          name: b.venue.name || "",
+          address: b.venue.address || "",
+          avatarImage: b.venue.avatarImage || "",
+          images: Array.isArray(b.venue.images) ? b.venue.images : [],
+        }
+        : null,
 
       date,
       dateLabel,
@@ -689,13 +751,11 @@ export async function getUserBookingDetail({ userId, bookingId }) {
 
   // === helper: convert slotIndex -> HH:MM ===
   function slotIndexToTimeLabel(slotIndex) {
-    // 1 slot = 60 minutes, bắt đầu từ 5:00 (theo logic chung)
-    const baseHour = 5;
-    const totalMinutes = baseHour * 60 + slotIndex * 60;
-    const h = Math.floor(totalMinutes / 60);
-    const m = totalMinutes % 60;
-    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+    const h = Number(slotIndex);
+    if (Number.isNaN(h)) return "";
+    return `${String(h).padStart(2, "0")}:00`;
   }
+
 
   // === build từng dòng khung giờ / sân ===
   const lineItems = items.map((it, idx) => {
@@ -711,8 +771,9 @@ export async function getUserBookingDetail({ userId, bookingId }) {
 
     return {
       id: it._id.toString(),
-      index: idx + 1, // dùng cho FE nếu cần
+      index: idx + 1,
       courtName: it.court?.name || "Sân",
+      note: booking.note || "",
       date: it.date,
       dateLabel,
       slotStart: it.slotStart,
@@ -806,8 +867,7 @@ export async function getUserBookingDetail({ userId, bookingId }) {
       }
       : null,
 
-    // text chung chung cho dịch vụ thêm (FE chỉ cần hiển thị nếu muốn)
-    extraServicesNote: "Có thể kèm dịch vụ thêm (nước uống, dụng cụ, phụ trợ).",
+    addons: booking.addons || { items: [], total: 0 },
   };
 }
 

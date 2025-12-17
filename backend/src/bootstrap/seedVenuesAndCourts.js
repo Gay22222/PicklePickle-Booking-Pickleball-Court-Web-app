@@ -82,7 +82,7 @@ export async function ensureVenuesAndCourts(ownerUser) {
       heroTagline: "Cụm 4 sân Pickleball ngoài trời tại trung tâm Thủ Đức",
       phone: "0909 123 456",
       basePricePerHour: 80000,
-      courts: ["A1", "A2", "B1", "B2"],
+      courts: ["Sân 1", "Sân 2", "Sân 3", "Sân 4"],
       images: [
         "/courts/sample1.png",
         "/courts/sample2.png",
@@ -98,7 +98,7 @@ export async function ensureVenuesAndCourts(ownerUser) {
       heroTagline: "Cụm 3 sân Pickleball ngay trung tâm Quận 1",
       phone: "0909 234 567",
       basePricePerHour: 90000,
-      courts: ["C1", "C2", "C3"],
+      courts: ["Sân 1", "Sân 2", "Sân 3"],
       images: [
         "/courts/sample2.png",
         "/courts/sample3.png",
@@ -114,7 +114,7 @@ export async function ensureVenuesAndCourts(ownerUser) {
       heroTagline: "Cụm 4 sân Pickleball tại khu Nam Sài Gòn",
       phone: "0909 345 678",
       basePricePerHour: 100000,
-      courts: ["D1", "D2", "D3", "D4"],
+      courts: ["Sân 1", "Sân 2", "Sân 3", "Sân 4"],
       images: [
         "/courts/sample2.png",
         "/courts/sample1.png",

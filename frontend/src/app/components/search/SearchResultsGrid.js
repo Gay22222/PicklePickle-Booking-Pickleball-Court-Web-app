@@ -12,6 +12,7 @@ export default function SearchResultsGrid({
 }) {
   // Map venue -> court object cho CourtCard
   const mappedCourts = (venues ?? []).map((v) => {
+    const avatar = v.avatarImageUrl || v.avatarImage || "";
     const primaryImage =
       (v.images || []).find((img) => img.isPrimary) ||
       (v.images || [])[0];
@@ -79,7 +80,7 @@ export default function SearchResultsGrid({
       address,
       timeRange,
       price,
-      image: primaryImage?.url || "/courts/sample1.png",
+      image: avatar || primaryImage?.url || "/courts/sample1.png",
     };
   });
 

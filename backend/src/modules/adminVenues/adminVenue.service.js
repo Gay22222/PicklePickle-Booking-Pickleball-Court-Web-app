@@ -18,6 +18,8 @@ function mapVenue(v) {
     managerName:
       v.manager?.fullName || v.manager?.email || "",
     status: v.isActive ? "ACTIVE" : "INACTIVE",
+    courtsCount: typeof v.courtsCount === "number" ? v.courtsCount : 1,
+
     basePricePerHour: v.basePricePerHour || 0,
     currency: v.currency || "VND",
     images: Array.isArray(v.images)
@@ -78,8 +80,8 @@ export async function listVenuesService(adminId, query = {}) {
       typeof r.fixedPricePerHour === "number"
         ? r.fixedPricePerHour
         : typeof r.walkinPricePerHour === "number"
-        ? r.walkinPricePerHour
-        : 0;
+          ? r.walkinPricePerHour
+          : 0;
 
     firstRuleMap.set(key, {
       id: r._id.toString(),
@@ -101,7 +103,7 @@ export async function listVenuesService(adminId, query = {}) {
     const firstRule = firstRuleMap.get(key);
     dto.priceRules = firstRule ? [firstRule] : [];
 
-    
+
     dto.firstPricePerHour = firstRule?.price || 0;
 
     return dto;
@@ -122,6 +124,7 @@ export async function createVenueService(adminId, payload) {
     images = [],
     avatarImage,
     priceRules = [],
+    courtsCount = 1,
   } = payload;
 
   if (!name) throw new HttpError(400, "Tên sân là bắt buộc");
@@ -137,6 +140,7 @@ export async function createVenueService(adminId, payload) {
     timeZone: "Asia/Ho_Chi_Minh",
     slotMinutes: 60,
     isActive: true,
+    courtsCount: Number(courtsCount) || 1,
     basePricePerHour,
     currency: "VND",
     images: Array.isArray(images)
@@ -153,6 +157,16 @@ export async function createVenueService(adminId, payload) {
     avatarImage: avatarImage || "",
     priceRules,
   });
+  const count = Math.max(1, Number(courtsCount) || 1);
+
+  await Court.insertMany(
+    Array.from({ length: count }, (_, i) => ({
+      venue: doc._id,
+      name: `Sân ${i + 1}`,
+      surface: "Hard court",
+      isActive: true,
+    }))
+  );
 
   return mapVenue(doc.toObject());
 }
@@ -166,6 +180,7 @@ export async function updateVenueService(adminId, venueId, payload) {
     address,
     managerId,
     status,
+    courtsCount,
     avatarImage,
     basePricePerHour,
     images,
@@ -178,11 +193,15 @@ export async function updateVenueService(adminId, venueId, payload) {
   if (district !== undefined) update.district = district;
   if (address !== undefined) update.address = address;
   if (managerId !== undefined) update.manager = managerId;
-  if (basePricePerHour !== undefined)
+
+  if (basePricePerHour !== undefined) {
     update.basePricePerHour = Number(basePricePerHour) || 0;
+  }
+
   if (status) {
     update.isActive = status.toUpperCase() === "ACTIVE";
   }
+
   if (images !== undefined) {
     update.images = Array.isArray(images)
       ? images.map((url, idx) =>
@@ -196,20 +215,55 @@ export async function updateVenueService(adminId, venueId, payload) {
       )
       : [];
   }
+
   if (avatarImage !== undefined) update.avatarImage = avatarImage;
-  if (priceRules !== undefined) {
-    update.priceRules = priceRules;
+  if (priceRules !== undefined) update.priceRules = priceRules;
+
+  // ====== courtsCount: lưu vào Venue + sync Court ======
+  let targetCourtsCount = null;
+  if (courtsCount !== undefined) {
+    targetCourtsCount = Math.max(1, Number(courtsCount) || 1);
+    update.courtsCount = targetCourtsCount;
   }
-  const doc = await Venue.findByIdAndUpdate(venueId, update, {
-    new: true,
-  })
+
+  const doc = await Venue.findByIdAndUpdate(venueId, update, { new: true })
     .populate("manager", "fullName email")
     .lean();
 
   if (!doc) throw new HttpError(404, "Không tìm thấy sân");
 
+  // Sync courts sau khi update venue
+  if (targetCourtsCount !== null) {
+    const courts = await Court.find({ venue: venueId })
+      .sort({ createdAt: 1 })
+      .lean();
+
+    const activeCourts = courts.filter((c) => c.isActive !== false);
+    const activeCount = activeCourts.length;
+
+    if (targetCourtsCount > activeCount) {
+      const more = targetCourtsCount - activeCount;
+      await Court.insertMany(
+        Array.from({ length: more }, (_, i) => ({
+          venue: venueId,
+          name: `Sân ${activeCount + i + 1}`,
+          surface: "Hard court",
+          isActive: true,
+        }))
+      );
+    } else if (targetCourtsCount < activeCount) {
+      // không hard delete để tránh mất liên kết booking -> disable từ cuối
+      const toDisable = activeCourts.slice(targetCourtsCount).map((c) => c._id);
+      await Court.updateMany(
+        { _id: { $in: toDisable } },
+        { $set: { isActive: false } }
+      );
+    }
+  }
+
   return mapVenue(doc);
 }
+
 
 /**
  * "Xoá" sân: chỉ set isActive = false.

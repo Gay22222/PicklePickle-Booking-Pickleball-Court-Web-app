@@ -269,6 +269,7 @@ function normalizeVenue(raw) {
 
   const id = raw.id || raw._id;
 
+
   // Ưu tiên các field manager* do BE trả về từ mapVenue()
   const owner =
     raw.owner ||
@@ -295,6 +296,7 @@ function normalizeVenue(raw) {
       raw.managerName ||
       "",
     address: raw.address || "",
+    courtsCount: Number(raw.courtsCount) || 1,
     images: raw.images || raw.photos || [],
     avatarImage: raw.avatarImage || (raw.images && raw.images[0]?.url) || "",
     openTime: raw.openTime || raw.openHour || "05:00",
@@ -392,6 +394,7 @@ export default function AdminVenuesPage() {
     closeTime: "22:00",
     priceRules: [],
     status: "active",
+    courtsCount: 1,
   });
 
   // ====== CALL API LOAD LIST ======
@@ -707,6 +710,7 @@ export default function AdminVenuesPage() {
       closeTime: "22:00",
       priceRules: [],
       status: "active",
+      courtsCount: 1,
     });
     setIsVenueFormOpen(true);
   }
@@ -726,6 +730,8 @@ export default function AdminVenuesPage() {
       closeTime: venue.closeTime || "22:00",
       priceRules: venue.priceRules || [],
       status: venue.status || "active",
+      courtsCount: venue.courtsCount ?? 1,
+
     });
     setIsVenueFormOpen(true);
 
@@ -860,6 +866,8 @@ export default function AdminVenuesPage() {
       avatarImage: venueFormValues.avatarImage || "",
       images: venueFormValues.images || [],
       status: venueFormValues.status,
+      courtsCount: Number(venueFormValues.courtsCount) || 1,
+
     };
 
     // Payload config: openTime / closeTime / priceRules
@@ -1776,6 +1784,20 @@ function VenueFormDialog({
                 </select>
               </div>
             </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-800">
+                Số lượng sân con
+              </label>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                value={values.courtsCount ?? 1}
+                onChange={(e) => onChange("courtsCount", e.target.value)}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-black focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500"
+              />
+            </div>
+
 
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-800">
