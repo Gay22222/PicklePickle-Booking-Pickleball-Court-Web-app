@@ -5,6 +5,8 @@ import { VenueOpenHour } from "../../models/venueOpenHour.model.js";
 import { PriceRule } from "../../models/priceRule.model.js";
 import { HttpError } from "../../shared/errors/httpError.js";
 import { assertAdminManager } from "../../modules/users/user.service.js";
+import { createNotification } from "../notifications/notification.service.js";
+
 
 
 function mapVenue(v) {
@@ -276,17 +278,29 @@ export async function deleteVenueService(adminId, venueId) {
     venueId,
     { isActive: false },
     { new: true }
-  ).lean();
+  )
+    .select("_id name manager isActive")
+    .lean();
 
   if (!venue) throw new HttpError(404, "Không tìm thấy sân");
 
-  // Nếu muốn hard delete kèm court + config thì thêm:
-  // await Court.deleteMany({ venue: venueId });
-  // await VenueOpenHour.deleteMany({ venue: venueId });
-  // await PriceRule.deleteMany({ venue: venueId });
+  // notify owner
+  if (venue.manager) {
+    await createNotification({
+      userId: venue.manager,
+      type: "VENUE_DISABLED",
+      level: "CRITICAL",
+      title: "Sân bị vô hiệu hóa",
+      content: `Sân "${venue.name}" đã bị vô hiệu hóa.`,
+      data: { venueId: String(venue._id), route: "/owner/bookings" },
+      // dedupeKey có time để nếu bật/tắt nhiều lần vẫn có noti mới
+      dedupeKey: `VENUE_DISABLED:${venue._id}:${Date.now()}`,
+    });
+  }
 
   return { success: true };
 }
+
 
 
 

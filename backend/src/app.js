@@ -21,6 +21,9 @@ import { adminFinanceRoutes } from "./modules/adminFinance/adminFinance.routes.j
 import { adminVenueRoutes } from "./modules/adminVenues/adminVenue.routes.js";
 import ownerVenueContentRoutes from "./modules/venueContent/ownerVenueContent.routes.js";
 import adminVenueContentRoutes from "./modules/venueContent/adminVenueContent.routes.js";
+import notificationRoutes from "./modules/notifications/notification.routes.js";
+import { startBookingReminderJob } from "./jobs/bookingReminder.job.js";
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -86,9 +89,12 @@ export function buildApp() {
   });
 
   app.register(adminVenueContentRoutes, { prefix: config.apiPrefix });
-  startBookingExpirationJob();
-
   
+
+  app.register(notificationRoutes, { prefix: config.apiPrefix });
+
+  startBookingExpirationJob();
+  startBookingReminderJob();
 
   return app;
 }
