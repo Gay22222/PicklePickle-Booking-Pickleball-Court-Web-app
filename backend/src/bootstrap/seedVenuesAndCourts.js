@@ -190,42 +190,12 @@ export async function ensureVenuesAndCourts(ownerUser) {
     await PriceRule.insertMany([
       {
         venue: venue._id,
-        dayLabel: "T2 - T6",
+        dayLabel: "T2 - CN",
         dayOfWeekFrom: 1,
         dayOfWeekTo: 5,
-        timeFrom: "09:00",
-        timeTo: "16:00",
+        timeFrom: "06:00",
+        timeTo: "22:00",
         fixedPricePerHour: base,
-        walkinPricePerHour: base + 10000,
-      },
-      {
-        venue: venue._id,
-        dayLabel: "T2 - CN",
-        dayOfWeekFrom: 1,
-        dayOfWeekTo: 7,
-        timeFrom: "05:00",
-        timeTo: "09:00",
-        fixedPricePerHour: base + 20000,
-        walkinPricePerHour: base + 30000,
-      },
-      {
-        venue: venue._id,
-        dayLabel: "T2 - CN",
-        dayOfWeekFrom: 1,
-        dayOfWeekTo: 7,
-        timeFrom: "16:00",
-        timeTo: "23:00",
-        fixedPricePerHour: base + 20000,
-        walkinPricePerHour: base + 30000,
-      },
-      {
-        venue: venue._id,
-        dayLabel: "T7 - CN",
-        dayOfWeekFrom: 6,
-        dayOfWeekTo: 7,
-        timeFrom: "09:00",
-        timeTo: "16:00",
-        fixedPricePerHour: base + 20000,
         walkinPricePerHour: base + 30000,
       },
     ]);
@@ -234,7 +204,7 @@ export async function ensureVenuesAndCourts(ownerUser) {
     await VenueHoliday.create({
       venue: venue._id,
       date: new Date("2025-01-01T00:00:00.000Z"),
-      reason: "Nghỉ lễ Tết Dương lịch (mock)",
+      reason: "Nghỉ lễ Tết Dương lịch ",
     });
 
     // 6) Blackout slot demo
@@ -246,7 +216,7 @@ export async function ensureVenuesAndCourts(ownerUser) {
         date: new Date("2025-01-05T00:00:00.000Z"),
         slotStart: 8,
         slotEnd: 9,
-        reason: "Bảo trì mặt sân (mock)",
+        reason: "Bảo trì mặt sân ",
       });
     }
 
