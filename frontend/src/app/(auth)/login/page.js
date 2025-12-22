@@ -308,7 +308,7 @@ export default function LoginPage() {
                 />
               </div>
 
-              {/* {error && <p className="text-xs text-red-500 text-right mt-1">{error}</p>} */}
+              {error && <p className="text-xs text-red-500 text-right mt-1">{error}</p>}
 
               <p className="mt-2 text-xs text-gray-500 text-right">
                 Don&apos;t you have an account?{" "}

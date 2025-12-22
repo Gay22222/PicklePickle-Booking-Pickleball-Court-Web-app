@@ -271,7 +271,7 @@ export default function CourtBookingTimePage() {
 
     if (!token) {
       alert("Vui lòng đăng nhập để đặt sân.");
-      router.push(`/auth/login?redirect=/courts/${courtId}/booking`);
+      router.push(`/login`);
       return;
     }
 
@@ -346,6 +346,11 @@ export default function CourtBookingTimePage() {
     );
   };
 
+  const showToast = (message, type = "success") => {
+    setToast({ open: true, message, type });
+    setTimeout(() => setToast((t) => ({ ...t, open: false })), 2500);
+  };
+
   const titleVenue = venueName || "PicklePickle";
 
   return (
@@ -354,7 +359,7 @@ export default function CourtBookingTimePage() {
         <h1 className="text-center text-2xl md:text-3xl font-semibold text-black">
           Tình trạng đặt sân {titleVenue}
         </h1>
-
+        
         {loadingAvail && <p className="text-center text-xs text-zinc-500">Đang tải tình trạng sân...</p>}
         {errorAvail && <p className="text-center text-xs text-red-500">{errorAvail}</p>}
 
