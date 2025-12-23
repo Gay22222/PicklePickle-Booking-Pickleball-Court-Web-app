@@ -1009,45 +1009,39 @@ export async function getOwnerDailyOverview({ ownerId, dateStr, venueId }) {
     const endHour = slotEnd + 1; // vì hiển thị đến HH+1:00
 
     if (statusDoc.isCancel) {
-      // 1) ĐÃ HỦY: luôn ưu tiên hiển thị "Đã huỷ"
       normalizedStatus = "cancelled";
     } else if (statusDoc.isFinal) {
-      // 2) Các trạng thái final như COMPLETED / NO_SHOW
       normalizedStatus = "completed";
     } else {
-      // 3) Các trạng thái chưa final (PENDING, CONFIRMED, ...)
-      //    -> dựa vào ngày + giờ để quyết định pending / completed
-
       if (dateStr < todayStr) {
-        // Ngày đã qua
         normalizedStatus = "completed";
       } else if (dateStr > todayStr) {
-        // Ngày tương lai
         normalizedStatus = "pending";
       } else {
-        // Cùng ngày hôm nay
-        if (currentHour >= endHour) {
-          // Qua giờ đặt sân -> Đã xong
-          normalizedStatus = "completed";
-        } else {
-          // Chưa đến giờ / đang trong khung giờ -> vẫn coi là "Đã đặt"
-          normalizedStatus = "pending";
-        }
+        if (currentHour >= endHour) normalizedStatus = "completed";
+        else normalizedStatus = "pending";
       }
     }
 
+    // ================== FIX GUEST PHONE/NAME ==================
+    const isGuest = Boolean(booking.isGuestBooking);
+    const guest = booking.guestInfo || {};
+
+    const customerName = isGuest
+      ? (guest.fullName || "Khách")
+      : (user.fullName || user.name || "Khách");
+
+    const phone = isGuest
+      ? (guest.phone || "")
+      : (user.phoneNumber || user.phone || "");
 
     return {
       id: item._id.toString(),
       code: booking.code,
       courtId: court._id?.toString(),
       courtName: court.name || "Sân",
-      customerName:
-        booking.guestInfo?.fullName ||
-        user.fullName ||
-        user.name ||
-        "Khách",
-      phone: user.phoneNumber || user.phone || "",
+      customerName,
+      phone,
       startTime,
       endTime,
       slotStartIndex: slotStart,
@@ -1059,6 +1053,7 @@ export async function getOwnerDailyOverview({ ownerId, dateStr, venueId }) {
       bookedAt: dateStr,
     };
   });
+
 
   return {
     venue: {
@@ -1184,26 +1179,30 @@ export async function getAdminDailyOverview({ dateStr, venueId }) {
       } else if (dateStr > todayStr) {
         normalizedStatus = "pending";
       } else {
-        if (currentHour >= endHour) {
-          normalizedStatus = "completed";
-        } else {
-          normalizedStatus = "pending";
-        }
+        if (currentHour >= endHour) normalizedStatus = "completed";
+        else normalizedStatus = "pending";
       }
     }
+
+    // ================== FIX GUEST PHONE/NAME ==================
+    const isGuest = Boolean(booking.isGuestBooking);
+    const guest = booking.guestInfo || {};
+
+    const customerName = isGuest
+      ? (guest.fullName || "Khách")
+      : (user.fullName || user.name || "Khách");
+
+    const phone = isGuest
+      ? (guest.phone || "")
+      : (user.phoneNumber || user.phone || "");
 
     return {
       id: item._id.toString(),
       code: booking.code,
       courtId: court._id?.toString(),
       courtName: court.name || "Sân",
-      customerName:
-        booking.guestInfo?.fullName ||
-        user.fullName ||
-        user.name ||
-        "Khách",
-
-      phone: user.phoneNumber || user.phone || "",
+      customerName,
+      phone,
       startTime,
       endTime,
       slotStartIndex: slotStart,
@@ -1215,6 +1214,7 @@ export async function getAdminDailyOverview({ dateStr, venueId }) {
       bookedAt: dateStr,
     };
   });
+
 
   return {
     venue: {

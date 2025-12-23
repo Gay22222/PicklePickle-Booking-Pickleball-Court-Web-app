@@ -15,6 +15,12 @@ const DEFAULT_HOURS = Array.from({ length: 18 }, (_, idx) => {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "/api";
 
+function formatDateYMDLocal(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 export default function CourtBookingTimePage() {
   const params = useParams();
   const courtId = params?.courtId; // venueId
@@ -61,7 +67,8 @@ export default function CourtBookingTimePage() {
   const [errorAvail, setErrorAvail] = useState("");
 
   const displayDate = currentDate.toLocaleDateString("vi-VN");
-  const dateParam = currentDate.toISOString().slice(0, 10); // YYYY-MM-DD
+  const dateParam = formatDateYMDLocal(currentDate);
+  // YYYY-MM-DD
 
   // ===== Fetch availability (poll 10s) =====
   useEffect(() => {
