@@ -153,7 +153,7 @@ export class SlotConflictError extends Error {
 // ================== Service: tạo booking ==================
 
 export async function createBookingFromSlots(payload) {
-  const { userId, venueId, date, courts, discount = 0, note, addonsTotal = 0, addons } = payload;
+  const { userId, venueId, guestInfo, isGuestBooking = false, date, courts, discount = 0, note, addonsTotal = 0, addons } = payload;
 
   if (!userId) throw new Error("userId is required");
   if (!venueId) throw new Error("venueId is required");
@@ -196,7 +196,10 @@ export async function createBookingFromSlots(payload) {
     discount: discount || 0,
     totalAmount: 0,
     note: note || "",
+    guestInfo: guestInfo || undefined,
+    isGuestBooking: !!isGuestBooking,
   });
+
 
   // 2) Tạo BookingSlot cho từng slot
   const bookingSlotsDocs = [];
@@ -555,7 +558,7 @@ export async function getVenueAvailability({ venueId, dateStr }) {
     venueId,
     date: dateStr,
     slotMinutes,
-    weekday, 
+    weekday,
     openTime: minutesToTimeStr(baseStartHour * 60),
     closeTime: minutesToTimeStr(baseEndHourExclusive * 60),
     isHoliday: false,
@@ -1039,7 +1042,11 @@ export async function getOwnerDailyOverview({ ownerId, dateStr, venueId }) {
       code: booking.code,
       courtId: court._id?.toString(),
       courtName: court.name || "Sân",
-      customerName: user.fullName || user.name || "Khách",
+      customerName:
+        booking.guestInfo?.fullName ||
+        user.fullName ||
+        user.name ||
+        "Khách",
       phone: user.phoneNumber || user.phone || "",
       startTime,
       endTime,
@@ -1190,7 +1197,12 @@ export async function getAdminDailyOverview({ dateStr, venueId }) {
       code: booking.code,
       courtId: court._id?.toString(),
       courtName: court.name || "Sân",
-      customerName: user.fullName || user.name || "Khách",
+      customerName:
+        booking.guestInfo?.fullName ||
+        user.fullName ||
+        user.name ||
+        "Khách",
+
       phone: user.phoneNumber || user.phone || "",
       startTime,
       endTime,

@@ -1,15 +1,16 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { apiFetch } from "@/lib/apiClient";
 
+const PAYMENT_DRAFT_KEY = "pp_booking_payment_draft";
+
 export default function VnpayReturnPage() {
   const searchParams = useSearchParams();
 
-  // Params VNPay trả về
   const rspCode = searchParams.get("vnp_ResponseCode");
   const orderId = searchParams.get("vnp_TxnRef");
   const amount = searchParams.get("vnp_Amount");
@@ -19,14 +20,27 @@ export default function VnpayReturnPage() {
 
   const isSuccess = rspCode === "00";
 
-  // VNPay trả amount * 100
   const formattedAmount =
     amount && !Number.isNaN(Number(amount))
       ? (Number(amount) / 100).toLocaleString("vi-VN")
       : null;
 
-  // Đồng bộ trạng thái thanh toán về backend
-  // Đồng bộ trạng thái thanh toán về backend
+  // Hydration-safe flags
+  const [mounted, setMounted] = useState(false);
+  const [isGuest, setIsGuest] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    try {
+      const raw = localStorage.getItem(PAYMENT_DRAFT_KEY);
+      if (!raw) return;
+      const draft = JSON.parse(raw);
+      setIsGuest(!!draft?.isGuest);
+    } catch {
+      // ignore
+    }
+  }, []);
+
   useEffect(() => {
     if (!orderId) return;
 
@@ -46,11 +60,9 @@ export default function VnpayReturnPage() {
       });
   }, [orderId, isSuccess]);
 
-
   return (
     <main className="min-h-screen bg-[#f5f7fb] flex flex-col items-center pt-24 px-4 text-gray-900">
       <div className="w-full max-w-3xl bg-white rounded-3xl shadow-md px-10 py-10">
-        {/* Icon + title + description */}
         <div className="flex items-center justify-center gap-5 mb-8">
           <Image
             src={isSuccess ? "/success.png" : "/failed.png"}
@@ -67,12 +79,11 @@ export default function VnpayReturnPage() {
             <p className="text-sm text-gray-600">
               {isSuccess
                 ? "Cảm ơn bạn đã hoàn tất thanh toán đơn đặt sân tại PicklePickle."
-                : "Có lỗi xảy ra trong quá trình thanh toán. Vui lòng kiểm tra lại trong phần lịch sử đặt sân."}
+                : "Có lỗi xảy ra trong quá trình thanh toán."}
             </p>
           </div>
         </div>
 
-        {/* Payment info */}
         <div className="bg-gray-50 rounded-2xl px-6 py-5 mb-8">
           <h2 className="text-sm font-semibold text-gray-700 mb-4">
             Thông tin thanh toán
@@ -123,22 +134,24 @@ export default function VnpayReturnPage() {
           <div className="flex justify-between text-sm mt-1">
             <span className="text-gray-500">Trạng thái</span>
             <span
-              className={`font-semibold ${isSuccess ? "text-emerald-600" : "text-red-500"
-                }`}
+              className={`font-semibold ${
+                isSuccess ? "text-emerald-600" : "text-red-500"
+              }`}
             >
               {isSuccess ? "Thành công" : "Thất bại"}
             </span>
           </div>
         </div>
 
-        {/* Buttons */}
         <div className="flex items-center justify-between gap-4">
-          <Link
-            href="/history"
-            className="flex-1 inline-flex items-center justify-center rounded-full border border-gray-300 text-sm font-medium py-3 text-gray-700 hover:bg-gray-50 transition-colors"
-          >
-            Xem lịch sử đặt sân
-          </Link>
+          {mounted && !isGuest && (
+            <Link
+              href="/history"
+              className="flex-1 inline-flex items-center justify-center rounded-full border border-gray-300 text-sm font-medium py-3 text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              Xem lịch sử đặt sân
+            </Link>
+          )}
 
           <Link
             href="/"

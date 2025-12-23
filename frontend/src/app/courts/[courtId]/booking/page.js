@@ -153,15 +153,15 @@ export default function CourtBookingTimePage() {
 
   const courtsRows = hasAvailability
     ? availability.courts.map((c, index) => ({
-        label: `Sân ${index + 1}`,
-        courtName: c.courtName,
-        slots: c.slots || [],
-      }))
+      label: `Sân ${index + 1}`,
+      courtName: c.courtName,
+      slots: c.slots || [],
+    }))
     : Array.from({ length: 3 }, (_, idx) => ({
-        label: `Sân ${idx + 1}`,
-        courtName: `Sân ${idx + 1}`,
-        slots: [],
-      }));
+      label: `Sân ${idx + 1}`,
+      courtName: `Sân ${idx + 1}`,
+      slots: [],
+    }));
 
   // ===== Chọn / bỏ chọn slot =====
   const toggleSlot = (rowIndex, colIndex) => {
@@ -271,11 +271,7 @@ export default function CourtBookingTimePage() {
 
     console.log("pp_token in booking page =", token);
 
-    if (!token) {
-      alert("Vui lòng đăng nhập để đặt sân.");
-      router.push(`/login`);
-      return;
-    }
+    const isGuest = !token;
 
     if (!availability || !Array.isArray(availability.courts)) {
       alert("Không có dữ liệu sân để tạo booking draft. Vui lòng tải lại trang.");
@@ -334,6 +330,8 @@ export default function CourtBookingTimePage() {
       courtPricingDetails: pricingDetails,
       courtTotal: totalPrice,
       addons: { items: [], total: 0 },
+      isGuest,
+      guestInfo: isGuest ? { fullName: "", phone: "", email: "" } : null,
     };
 
     if (typeof window !== "undefined") {
@@ -361,7 +359,7 @@ export default function CourtBookingTimePage() {
         <h1 className="text-center text-2xl md:text-3xl font-semibold text-black">
           Tình trạng đặt sân {titleVenue}
         </h1>
-        
+
         {loadingAvail && <p className="text-center text-xs text-zinc-500">Đang tải tình trạng sân...</p>}
         {errorAvail && <p className="text-center text-xs text-red-500">{errorAvail}</p>}
 

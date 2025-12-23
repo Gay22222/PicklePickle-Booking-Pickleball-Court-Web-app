@@ -256,9 +256,7 @@ function Bubble({ role, text }) {
 }
 
 async function callChatbotApi({ endpoint, message, context }) {
-    if (!endpoint || !endpoint.startsWith("http")) {
-        return { reply: "", context };
-    }
+    if (!endpoint) return { reply: "", context };
 
     const token =
         typeof window !== "undefined" ? localStorage.getItem("pp_token") : null;
