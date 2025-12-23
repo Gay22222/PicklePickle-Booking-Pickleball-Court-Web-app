@@ -1,4 +1,3 @@
-  GNU nano 6.2                                                                                                      Dockerfile                                                                                                               # ----------------------
 # Build stage
 # ----------------------
 FROM node:22.21.1-alpine AS builder
