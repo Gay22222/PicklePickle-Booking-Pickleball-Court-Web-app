@@ -13,6 +13,8 @@ const DEFAULT_HOURS = Array.from({ length: 18 }, (_, idx) => {
   return `${hour.toString().padStart(2, "0")}:00`;
 });
 
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "/api";
+
 export default function CourtBookingTimePage() {
   const params = useParams();
   const courtId = params?.courtId; // venueId
@@ -28,7 +30,7 @@ export default function CourtBookingTimePage() {
     (async () => {
       try {
         const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_BASE}/venues/${courtId}/detail`
+          `${API_BASE}/venues/${courtId}/detail`
         );
         if (!res.ok) {
           console.error("Fetch venue detail failed", res.status);
@@ -74,7 +76,7 @@ export default function CourtBookingTimePage() {
         setErrorAvail("");
 
         const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_BASE}/venues/${courtId}/availability?date=${dateParam}`
+          `${API_BASE}/venues/${courtId}/availability?date=${dateParam}`
         );
 
         if (!res.ok) {

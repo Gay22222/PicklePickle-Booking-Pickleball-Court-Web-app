@@ -18,7 +18,7 @@ const USER_STORAGE_KEY = "pp_user";
 const TOKEN_STORAGE_KEYS = ["pp_token"];
 const PAYMENT_DRAFT_KEY = "pp_booking_payment_draft";
 
-
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "/api";
 
 export default function CourtBookingAddonsPage() {
     const params = useParams();
@@ -67,7 +67,7 @@ export default function CourtBookingAddonsPage() {
 
         (async () => {
             try {
-                const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/venues/${courtId}/detail`);
+                const res = await fetch(`${API_BASE}/venues/${courtId}/detail`);
                 if (!res.ok) return;
 
                 const json = await res.json();

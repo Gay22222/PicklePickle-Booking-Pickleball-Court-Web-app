@@ -9,9 +9,7 @@ import PaymentInvoiceSection from "@/app/components/payment/PaymentInvoiceSectio
 const PAYMENT_DRAFT_KEY = "pp_booking_payment_draft";
 const TOKEN_STORAGE_KEY = "pp_token";
 
-
-
-
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "/api";
 
 export default function CourtPaymentPage() {
   const params = useParams();
@@ -21,9 +19,6 @@ export default function CourtPaymentPage() {
   const [invoiceItems, setInvoiceItems] = useState([]);
   const [paymentDraft, setPaymentDraft] = useState(null);
   const [loadingDraft, setLoadingDraft] = useState(true);
-
-
-
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -119,7 +114,7 @@ export default function CourtPaymentPage() {
           total: addonsTotal,
         };
 
-        const resCreate = await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/bookings`, {
+        const resCreate = await fetch(`${API_BASE}/bookings`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -163,7 +158,7 @@ export default function CourtPaymentPage() {
       }
 
       // 2) Checkout payment
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/payments/checkout`, {
+      const res = await fetch(`${API_BASE}/payments/checkout`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

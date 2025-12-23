@@ -6,8 +6,7 @@ import { usePathname } from "next/navigation";
 const TOKEN_KEY = "pp_token";
 
 
-const DEFAULT_ENDPOINT =
-    (process.env.NEXT_PUBLIC_API_BASE || "") + "/chatbot/message";
+const DEFAULT_ENDPOINT = (process.env.NEXT_PUBLIC_API_BASE || "/api") + "/chatbot/message";
 
 export default function ChatWidget({ endpoint = DEFAULT_ENDPOINT, brandName = "PicklePickle" }) {
     const pathname = usePathname();
