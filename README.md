@@ -129,7 +129,7 @@ mkdir -p models
 Download bằng wget 
 
 ```bash
-wget -c -O Arcee-VyLinh.Q4_K_M.gguf   https://huggingface.co/QuantFactory/Arcee-VyLinh-GGUF/resolve/main/Arcee-VyLinh.Q4_K_M.gguf
+wget -S --max-redirect=20 --header="Authorization: Bearer $HF_TOKEN" -O qwen3-0.6b-q4_k_m.gguf "https://huggingface.co/gvij/qwen3-0.6b-gguf/resolve/main/qwen3-0.6b-q4_k_m.gguf?download=true"
 ```
 
 
